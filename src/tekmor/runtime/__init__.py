@@ -4,14 +4,13 @@ The Qwen3-8B adapter needs the `qwen` extra; see src/CLAUDE.md.
 """
 
 from tekmor.runtime.gateway import Execution, ToolGateway, deny
-from tekmor.runtime.model import ModelAdapter, Proposal, ScriptedModel
+from tekmor.runtime.model import ModelAdapter, ScriptedModel
 from tekmor.runtime.qwen import Qwen3Adapter
 from tekmor.runtime.runner import RunResult, StepOutcome, run
 
 __all__ = [
     "Execution",
     "ModelAdapter",
-    "Proposal",
     "Qwen3Adapter",
     "RunResult",
     "ScriptedModel",

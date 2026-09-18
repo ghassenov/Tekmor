@@ -37,7 +37,6 @@ def test_the_adapter_proposes_an_action_with_a_real_model():
         tools=("read_document", "send_email", "draft_email"),
         model_id=os.environ.get("TEKMOR_QWEN_MODEL", "Qwen/Qwen3-8B"),
     )
-    proposal = adapter.propose(AgentState(task="Read invoice INV-1.", step=0), ())
-    assert proposal is None or proposal.action.tool in adapter.tools
-    # Provenance is empty until taint propagation exists; see the module docstring.
-    assert proposal is None or proposal.sources == ()
+    action = adapter.propose(AgentState(task="Read invoice INV-1.", step=0), ())
+    # The adapter proposes an action and nothing else: provenance is the runner's.
+    assert action is None or action.tool in adapter.tools

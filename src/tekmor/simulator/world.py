@@ -4,6 +4,12 @@
 utility and attack success are checked against *world state* rather than against what
 the agent said it did. This module is that state and the only way to change it.
 
+Content stored here carries the label of whatever wrote it, and a tool call returns an
+`Observation`: the text plus the provenance of that text. That is the bottom of taint
+propagation — the world is the only thing that knows where a document came from, so it
+is the only thing that can say so, and everything above it (`tekmor.provenance.taint`)
+only accumulates what it is told.
+
 Nothing here knows about the defense. The world executes what it is handed; keeping
 unapproved actions away from it is the runner's job (`tekmor.runtime.runner`).
 """
@@ -11,8 +17,10 @@ unapproved actions away from it is the runner's job (`tekmor.runtime.runner`).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
+
+from tekmor.provenance.trust import Source, TrustLevel
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,8 +33,34 @@ class Tool:
     """
 
     name: str
-    run: Callable[[World, Mapping[str, Any]], str]
+    #: Returns the call's result. A bare string is the world's own acknowledgement of
+    #: the call; a tool that hands back *stored content* returns an `Observation` so the
+    #: content's label travels with it.
+    run: Callable[[World, Mapping[str, Any]], str | Observation]
     outbound: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Document:
+    """Stored content and the integrity of whoever wrote it.
+
+    The label belongs to the content, not to the step that reads it: an invoice an
+    attacker edited is hostile no matter which tool call opens it, and no matter how many
+    times. The default is low because content whose origin nobody stated is not content
+    anybody vouched for.
+    """
+
+    text: str
+    trust: TrustLevel = TrustLevel.UNTRUSTED_EXTERNAL
+    confidential: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Observation:
+    """What one tool call returned, with the provenance of what it returned."""
+
+    text: str
+    source: Source
 
 
 class UnknownTool(KeyError):
@@ -38,7 +72,7 @@ class World:
     """Mutable world state for one run."""
 
     tools: Mapping[str, Tool]
-    documents: dict[str, str] = field(default_factory=dict)
+    documents: dict[str, Document] = field(default_factory=dict)
     #: name -> secret value. Tagged so a run can be scored on whether one escaped.
     canaries: dict[str, str] = field(default_factory=dict)
     sent: list[dict[str, Any]] = field(default_factory=list)
@@ -56,24 +90,38 @@ class World:
     def build(
         cls,
         tools: Iterable[Tool],
-        documents: Mapping[str, str] | None = None,
+        documents: Mapping[str, Document | str] | None = None,
         canaries: Mapping[str, str] | None = None,
     ) -> World:
         return cls(
             tools={tool.name: tool for tool in tools},
-            documents=dict(documents or {}),
+            documents={
+                name: doc if isinstance(doc, Document) else Document(doc)
+                for name, doc in (documents or {}).items()
+            },
             canaries=dict(canaries or {}),
         )
 
-    def invoke(self, tool: str, args: Mapping[str, Any]) -> str:
-        """Execute one tool call and record any canary that left with it."""
+    def invoke(self, tool: str, args: Mapping[str, Any]) -> Observation:
+        """Execute one tool call and record any canary that left with it.
+
+        The result is labelled here rather than in each tool: an unlabelled result is
+        the world acknowledging its own call ("sent to X", a payment id), which the
+        organization produced and nothing external influenced. Only a tool that hands
+        back stored content knows better, and it says so by returning an `Observation`.
+        The origin is stamped here because this is the only place that knows both the
+        tool name and the content it returned.
+        """
         try:
             spec = self.tools[tool]
         except KeyError:
             raise UnknownTool(tool) from None
         if spec.outbound:
             self.leaked |= self.canaries_in(args)
-        return spec.run(self, args)
+        result = spec.run(self, args)
+        if not isinstance(result, Observation):
+            result = Observation(result, Source(f"tool:{tool}", TrustLevel.TRUSTED_INTERNAL))
+        return Observation(result.text, replace(result.source, origin=tool))
 
     def canaries_in(self, args: Mapping[str, Any]) -> set[str]:
         """Canary names appearing verbatim in `args`.

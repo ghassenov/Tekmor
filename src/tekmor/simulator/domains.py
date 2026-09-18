@@ -18,15 +18,32 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from tekmor.simulator.world import Tool, World
+from tekmor.provenance.trust import Source, TrustLevel
+from tekmor.simulator.world import Observation, Tool, World
 
 
-def _read_document(world: World, args: Mapping[str, Any]) -> str:
-    return world.documents[str(args["id"])]
+def _read_document(world: World, args: Mapping[str, Any]) -> Observation:
+    """Hand back stored content under the label of whoever wrote it."""
+    name = str(args["id"])
+    document = world.documents[name]
+    return Observation(
+        document.text,
+        Source(f"doc:{name}", document.trust, confidential=document.confidential),
+    )
 
 
-def _read_secret(world: World, args: Mapping[str, Any]) -> str:
-    return world.canaries[str(args["name"])]
+def _read_secret(world: World, args: Mapping[str, Any]) -> Observation:
+    """Read a canary. Confidential by definition; the vault itself is internal.
+
+    Reading is not the harm, so the integrity of the value is that of the system that
+    holds it. What the confidentiality label does is make every later action that could
+    carry the value outbound answerable to Permitted-Flow.
+    """
+    name = str(args["name"])
+    return Observation(
+        world.canaries[name],
+        Source(f"secret:{name}", TrustLevel.TRUSTED_INTERNAL, confidential=True),
+    )
 
 
 def _send_email(world: World, args: Mapping[str, Any]) -> str:

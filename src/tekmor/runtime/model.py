@@ -5,7 +5,10 @@ Qwen3-8B backend for real runs. The Qwen3-8B adapter lives in `qwen.py`, behind 
 optional extra; this module is the interface and the mock every test uses.
 
 An adapter proposes actions. It never decides anything: the decision is `mediate()`'s,
-and an adapter cannot see the verdict except through the observation it gets back.
+and an adapter cannot see the verdict except through the observation it gets back. It
+does not state its provenance either: what influenced an action is computed from what
+the agent actually read (`tekmor.provenance.taint`), so an adapter has nothing to
+declare and no way to declare itself trusted.
 """
 
 from __future__ import annotations
@@ -15,20 +18,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from tekmor.defense import Action, AgentState
-from tekmor.provenance.trust import Source
 from tekmor.simulator.scenario import ScriptedStep
-
-
-@dataclass(frozen=True, slots=True)
-class Proposal:
-    """A candidate action and the sources that influenced it.
-
-    Phase 2 replaces the declared `sources` with taint computed from what the agent
-    actually read; the field stays, its provider changes.
-    """
-
-    action: Action
-    sources: tuple[Source, ...] = ()
 
 
 @runtime_checkable
@@ -37,7 +27,7 @@ class ModelAdapter(Protocol):
 
     name: str
 
-    def propose(self, state: AgentState, observations: Sequence[str]) -> Proposal | None: ...
+    def propose(self, state: AgentState, observations: Sequence[str]) -> Action | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,8 +43,8 @@ class ScriptedModel:
     steps: tuple[ScriptedStep, ...]
     name: str = "scripted"
 
-    def propose(self, state: AgentState, observations: Sequence[str]) -> Proposal | None:
+    def propose(self, state: AgentState, observations: Sequence[str]) -> Action | None:
         if state.step >= len(self.steps):
             return None
         step = self.steps[state.step]
-        return Proposal(Action(step.tool, step.args), step.sources)
+        return Action(step.tool, step.args)

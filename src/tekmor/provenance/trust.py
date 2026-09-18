@@ -9,8 +9,8 @@ Read as Biba integrity labels: the integrity of anything influenced by several i
 the *minimum* integrity of those inputs. The enum is ordered so that the usual
 comparison operators are the lattice order and `min()` is the meet.
 
-Taint propagation through memory and tool-output fields is Phase 2; this module is only
-the lattice itself and the labelled source it applies to.
+This module is the lattice itself and the labelled source it applies to. Accumulating
+those labels over a run is `taint.py`.
 """
 
 from collections.abc import Iterable

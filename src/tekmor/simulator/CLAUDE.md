@@ -4,10 +4,10 @@ Scope: the synthetic world the agent acts in. Root and `src/` rules apply.
 
 ## Status
 
-**Implemented:** `world.py` (mutable state, typed tools, canary tagging on outbound
-calls, the payment lifecycle invariant), `domains.py` (the enterprise, financial and SOC
-tool sets), `scenario.py` (the scenario format, its validation, and the JSON and YAML
-front ends).
+**Implemented:** `world.py` (mutable state, typed tools, labelled content and
+observations, canary tagging on outbound calls, the payment lifecycle invariant),
+`domains.py` (the enterprise, financial and SOC tool sets), `scenario.py` (the scenario
+format, its validation, and the JSON and YAML front ends).
 
 **Not implemented:** the scenario matrix, and robustness variants (paraphrase / base64 /
 hex / spaced / reversed).
@@ -16,6 +16,13 @@ hex / spaced / reversed).
 
 - **The simulator never imports from `defense/`.** It produces labelled observations and
   executes approved calls; it must not be able to influence or anticipate a decision.
+- **Content carries the label, steps never do.** A document states the integrity of
+  whoever wrote it; what influenced an action is computed from the reads the run
+  performed (`tekmor.provenance.taint`). A scenario that could label a step would be
+  choosing the defense's input, which is the same defect as letting the defense read
+  `benign`. `parse_scenario` rejects both a step that declares sources and a document
+  that states no trust — guessing a label either invents trust or turns every scenario
+  into an attack.
 - **Scenario metadata (`id`, `version`, `benign`) must never reach the defense.** Only
   the task, the action, its provenance, and the policy do. A defense that can recognise
   a test case is not evidence of security.
