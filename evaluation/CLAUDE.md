@@ -7,8 +7,17 @@ Scope: benchmarks, scenarios, metrics, experiments, and their outputs. Root rule
 The harness runs. `uv run python -m evaluation.harness` runs every scenario in
 `scenarios/` under every defense and writes a timestamped directory under `results/`:
 raw decision events, per-run records, and a manifest, plus the aggregate under
-`processed/`. BTU, ASR, CVR, FBR and UER are implemented; precision/recall, AUROC/AUPRC
-and ECE are not, because they need a calibrated risk score the monitor does not yet emit.
+`processed/`. BTU, ASR, CVR, FBR, UER and time-to-detection are implemented, and so are
+precision/recall/F1 per action and AUROC/ECE over the risk score. AUPRC, intervention
+latency and blast radius are not.
+
+**Per-action labels are derived, never declared.** `unsafe_steps` replays each prefix of
+an attack scenario under `AllowAll` and labels the step whose execution first makes the
+scenario's `attack_success` conditions hold. So "unsafe" means what ASR means, the label
+is identical under every defense, and a scenario author cannot label a step the way they
+wish the defense behaved. Read precision with that definition in mind: it marks the
+*goal-reaching* step, so stopping the same injected chain one step earlier scores as a
+false positive.
 
 Seven scenarios across three domains is a matrix, not a benchmark. External validation
 (AgentDojo), robustness variants and the adaptive attacker are Phase 4.
@@ -18,7 +27,7 @@ Seven scenarios across three domains is a matrix, not a benchmark. External vali
 ```
 scenarios/    versioned scenario definitions, JSON or YAML (see docs/decisions.md)
 harness.py    run the matrix: scenarios x defenses -> raw records + manifest
-metrics.py    BTU, ASR, CVR, FBR, UER, computed from run records
+metrics.py    BTU, ASR, CVR, FBR, UER, detection and calibration, from run records
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 benchmarks/   external harness integration (AgentDojo first) — not started
 ```

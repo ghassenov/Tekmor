@@ -10,9 +10,10 @@ The packages below define the module boundaries from `docs/technical-doc.md` Par
 **Implemented:** the decision contract (`Action`, `ActionProvenance`, `AgentState`,
 `Decision`, `Verdict`, the `Defense` protocol) and the fail-closed `mediate()` entry
 point in `defense/core.py`; the three baselines in `defense/baselines.py`; the
-`ReferenceMonitor` in `defense/monitor.py`, with the capability downgrade; the `Policy`
-object and the Trusted-Action, Permitted-Flow and least-privilege rules in
-`policy/core.py`; the trust lattice, `Source`, its confidentiality label and the
+`ReferenceMonitor` in `defense/monitor.py`, with the capability downgrade; signal
+extraction in `defense/signals.py` and the risk score, its severities and its bands in
+`defense/risk.py`; the `Policy` object and the Trusted-Action, Permitted-Flow and
+least-privilege rules in `policy/core.py`; the trust lattice, `Source`, its confidentiality label and the
 `TaintTracker` in `provenance/`; the encoding-aware canary matcher in
 `provenance/canary.py` and the `CanaryScanner` layer over it in `defense/canary.py`; the
 decision event and append-only JSONL log in `observability/events.py`; the enterprise,
@@ -20,18 +21,32 @@ financial and SOC worlds, typed tools, canary tagging and the JSON/YAML scenario
 in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the Qwen3-8B adapter,
 the run loop and the `ToolGateway` in `runtime/`.
 
-**Not implemented:** signal extraction, calibrated risk scoring, and argument redaction
-as a rewrite. Without a risk score there is no calibration, so precision/recall, AUROC and
-ECE are still undefined here.
+**Not implemented:** argument redaction as a rewrite, the timeline and provenance-graph
+viewer, and any *calibration* of the risk score — the severities in `defense/risk.py` are
+ordinal and hand-ordered, and Platt-scaling them against held-out runs (CALIB-RISK) is
+not done. ECE is measured and reported, not achieved.
 
 **Evaluated, on this repository's own matrix.** `evaluation/harness.py` runs every
-scenario under every defense and scores BTU, ASR, CVR, FBR and UER from world state;
+scenario under every defense and scores BTU, ASR, CVR, FBR and UER from world state,
+plus precision/recall/F1 over per-action labels and AUROC/ECE over the risk score;
 `docs/decisions.md` records the first measurement and its limits. Seven scenarios in
 three domains is a matrix, not a benchmark, and the external validation (AgentDojo),
 the robustness variants and the adaptive attacker are still ahead.
 
 A scenario states its own ground truth (`success` / `attack_success`: conditions over
-world state) and that, like `id` and `benign`, never reaches a defense.
+world state) and that, like `id` and `benign`, never reaches a defense. The *per-action*
+labels the detection metrics need are not stated at all: `evaluation.metrics.unsafe_steps`
+derives them by replaying each prefix undefended, so no one hand-labels which step the
+defense was supposed to stop.
+
+**What the risk score is and is not.** `defense/signals.py` evaluates the policy
+predicates once into a named `Signals` value; the monitor decides from it and
+`defense/risk.py` scores the same object, so the number next to a verdict was computed
+from the facts that verdict was. The score *describes*, it does not decide — the rules do,
+in their fixed order — and `risk.band()` states the doc's threshold table as a claim about
+the rules that `tests/security/test_risk_bands.py` asserts over the whole matrix. The
+severities are ordinal, so their ordering (AUROC) is meaningful and their magnitudes
+(ECE) are not yet.
 
 **What taint propagation does and does not close.** The sources the monitor decides from
 are now computed from what the agent actually read: the world labels stored content, a
