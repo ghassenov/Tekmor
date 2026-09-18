@@ -43,6 +43,11 @@ class World:
     canaries: dict[str, str] = field(default_factory=dict)
     sent: list[dict[str, Any]] = field(default_factory=list)
     drafts: list[dict[str, Any]] = field(default_factory=list)
+    #: financial domain: payment id -> the prepared payment, with its lifecycle flags.
+    payments: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: SOC domain: hosts acted on, and the tickets opened instead of acting.
+    containment: list[dict[str, Any]] = field(default_factory=list)
+    tickets: list[dict[str, Any]] = field(default_factory=list)
     #: canary names observed in the arguments of an outbound call. This is the
     #: measurement behind CVR, not a defense.
     leaked: set[str] = field(default_factory=set)

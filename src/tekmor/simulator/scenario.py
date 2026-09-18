@@ -1,8 +1,9 @@
 """The scenario format: one run's world, policy, and scripted agent steps.
 
-Scenarios are JSON. `docs/technical-doc.md` says YAML, but YAML needs a dependency and
-the format is a handful of lists and strings; the deviation is recorded in
-`docs/decisions.md`.
+Scenarios are JSON or YAML: both front ends produce the same `Scenario`, and the
+validation below is the only definition of the format. JSON needs nothing; YAML needs
+PyYAML, which is an optional extra rather than a runtime dependency, so a checkout that
+never touches a `.yaml` scenario still installs nothing. See `docs/decisions.md`.
 
 A scenario carries metadata the *scorer* needs (`id`, `version`, `benign`) and content
 the *run* needs (world, policy, steps). Only the second group ever reaches the defense:
@@ -118,4 +119,19 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
 
 
 def load_scenario(path: str | Path) -> Scenario:
-    return parse_scenario(json.loads(Path(path).read_text(encoding="utf-8")))
+    """Load a scenario from a `.json`, `.yaml` or `.yml` file."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    if path.suffix in {".yaml", ".yml"}:
+        try:
+            import yaml
+        except ModuleNotFoundError:
+            raise ScenarioError(
+                f"{path.name} is YAML, which needs PyYAML: uv sync --extra yaml"
+            ) from None
+        data = yaml.safe_load(text)
+    else:
+        data = json.loads(text)
+    if not isinstance(data, Mapping):
+        raise ScenarioError(f"{path.name} is not a scenario object")
+    return parse_scenario(data)
