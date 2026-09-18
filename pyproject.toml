@@ -16,8 +16,13 @@ dependencies = []
 [project.optional-dependencies]
 # YAML scenario files (simulator/scenario.py). JSON scenarios need nothing.
 yaml = ["pyyaml>=6"]
+# The Qwen3-8B adapter (runtime/qwen.py). Transformers rather than a serving layer, so
+# residual-stream hooks stay reachable for Proposal C.
+qwen = ["transformers>=4.51", "torch>=2.4", "accelerate>=1.0"]
+
 [dependency-groups]
-# pyyaml is here as well as in the extras so CI exercises the YAML front end.
+# pyyaml is here as well as in the extras so CI exercises the YAML front end; the qwen
+# extra is deliberately not, because CI has no GPU and those tests are marked slow.
 dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
 
 [build-system]
@@ -36,7 +41,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+# `slow` is excluded by default: those tests load a real model backend, and the default
+# `uv run pytest` must not start a multi-gigabyte download. `-m slow` on the command line
+# overrides this.
+addopts = "-q --strict-markers -m 'not slow'"
 markers = [
   "slow: needs a real model backend or a GPU; excluded from the default run",
 ]

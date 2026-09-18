@@ -1,16 +1,18 @@
-"""Tekmor runtime component: the model adapter, the run loop, and the tool gateway.
+"""Tekmor runtime component: the model adapters, the run loop, and the tool gateway.
 
-The Qwen3-8B adapter is not implemented; see src/CLAUDE.md.
+The Qwen3-8B adapter needs the `qwen` extra; see src/CLAUDE.md.
 """
 
 from tekmor.runtime.gateway import Execution, ToolGateway, deny
 from tekmor.runtime.model import ModelAdapter, Proposal, ScriptedModel
+from tekmor.runtime.qwen import Qwen3Adapter
 from tekmor.runtime.runner import RunResult, StepOutcome, run
 
 __all__ = [
     "Execution",
     "ModelAdapter",
     "Proposal",
+    "Qwen3Adapter",
     "RunResult",
     "ScriptedModel",
     "StepOutcome",
