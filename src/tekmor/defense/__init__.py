@@ -3,8 +3,12 @@
 `ReferenceMonitor` is the deterministic core of Proposal A: least privilege,
 Permitted-Flow, then Trusted-Action with a capability downgrade. Signal extraction and
 calibrated risk scoring are still Phase 3; see src/CLAUDE.md.
+
+`CanaryScanner` layers the encoding-aware secret scan (CANARY-FLOW) over any defense,
+for the argument-level residual the provenance rule cannot see.
 """
 
+from tekmor.defense.canary import CanaryScanner
 from tekmor.defense.core import (
     Action,
     ActionProvenance,
@@ -19,6 +23,7 @@ from tekmor.defense.monitor import ReferenceMonitor
 
 __all__ = [
     "Action",
+    "CanaryScanner",
     "ActionProvenance",
     "AgentState",
     "Decision",

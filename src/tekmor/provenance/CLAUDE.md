@@ -6,7 +6,9 @@ Scope: trust labelling and taint propagation. Root and `src/` rules apply.
 
 **Implemented:** `trust.py` (the lattice, its meet, and `Source` with its integrity and
 confidentiality labels), `taint.py` (`TaintTracker`: the influences accumulated over one
-run, seeded with the request that asked for the work).
+run, seeded with the request that asked for the work), `canary.py` (the
+encoding-aware secret matcher: plain, separator-broken, case-shifted, reversed, hex, and
+base64 at each of the three byte alignments).
 
 **Not implemented:** field-level provenance, and the endorsement primitive.
 
