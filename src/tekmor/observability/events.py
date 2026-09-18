@@ -5,6 +5,11 @@ schema; this carries the fields that exist in the current implementation. Fields
 added as the components that produce them land — an event never claims a signal the
 decision did not use.
 
+The *aggregate* risk score is logged and the per-signal contributions are not. The
+schema asks for both, and the breakdown is the half that is a hill-climbing channel
+(`defense/CLAUDE.md`), so it stays derivable from the signals rather than written next
+to a verdict an attacker may get to see. `defense.risk.contributions` computes it.
+
 Argument *values* are never written, and the rule holds whether or not a value is a
 known secret: redacting against the canary registry would protect the values someone
 remembered to register and no others, and a trace is not the place to find out which
@@ -39,6 +44,9 @@ class DecisionEvent:
     policy_version: int
     verdict: str
     reason_codes: tuple[str, ...]
+    #: The aggregate risk score, or None for a defense that emits no score. Null and
+    #: 0.0 are different claims and the log keeps them apart.
+    risk: float | None
     rewritten_tool: str | None
     timestamp: str
 
@@ -56,6 +64,7 @@ class DecisionEvent:
             "policy_version": self.policy_version,
             "verdict": self.verdict,
             "reason_codes": list(self.reason_codes),
+            "risk": self.risk,
             "rewritten_tool": self.rewritten_tool,
             "timestamp": self.timestamp,
         }
@@ -86,6 +95,7 @@ def decision_event(
         policy_version=policy.version,
         verdict=decision.verdict.value,
         reason_codes=decision.reason_codes,
+        risk=decision.risk,
         rewritten_tool=decision.rewritten.tool if decision.rewritten else None,
         timestamp=datetime.now(UTC).isoformat(),
     )
