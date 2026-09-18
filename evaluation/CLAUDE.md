@@ -8,8 +8,16 @@ The harness runs. `uv run python -m evaluation.harness` runs every scenario in
 `scenarios/` under every defense and writes a timestamped directory under `results/`:
 raw decision events, per-run records, and a manifest, plus the aggregate under
 `processed/`. BTU, ASR, CVR, FBR, UER and time-to-detection are implemented, and so are
-precision/recall/F1 per action and AUROC/ECE over the risk score. AUPRC, intervention
+precision/recall/F1 per action and AUROC/AUPRC/ECE over the risk score. Intervention
 latency and blast radius are not.
+
+`calibration.py` is CALIB-RISK: it Platt-scales the risk score **leave-one-scenario-out**
+and reports ECE, Brier and AUROC raw and calibrated over the same held-out actions. The
+fold is the scenario, never the action — actions inside one run share a world, a policy
+and an injected chain, so an action-level split trains on an action's near-twin. On this
+matrix the calibration is *worse* than the ordinal scale, which is a result and is
+recorded in `docs/decisions.md` rather than tuned away. The harness also writes a
+`timeline.html` beside each `decisions.jsonl` (`tekmor.observability.viewer`).
 
 **Per-action labels are derived, never declared.** `unsafe_steps` replays each prefix of
 an attack scenario under `AllowAll` and labels the step whose execution first makes the
@@ -27,15 +35,18 @@ Seven scenarios across three domains is a matrix, not a benchmark. External vali
 ```
 scenarios/    versioned scenario definitions, JSON or YAML (see docs/decisions.md)
 harness.py    run the matrix: scenarios x defenses -> raw records + manifest
-metrics.py    BTU, ASR, CVR, FBR, UER, detection and calibration, from run records
+metrics.py    BTU, ASR, CVR, FBR, UER, detection and ECE, from run records
+calibration.py  CALIB-RISK: the Platt fit, the held-out protocol, and its own controls
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 benchmarks/   external harness integration (AgentDojo first) — not started
 ```
 
-`harness.py` and `metrics.py` are single modules rather than the `metrics/` and
-`experiments/` packages first sketched: one module each is what they are, and the root
-rule against abstraction with one implementation applies here too. Split them when they
-outgrow a file.
+`harness.py`, `metrics.py` and `calibration.py` are single modules rather than the
+`metrics/` and `experiments/` packages first sketched: one module each is what they are,
+and the root rule against abstraction with one implementation applies here too. Split them
+when they outgrow a file. `calibration.py` is separate from `metrics.py` because it is the
+one thing in here that *fits* something — it has a training protocol to get wrong, and
+keeping it beside the metrics it is scored by would blur which numbers were learned.
 
 Evaluation depends on `src/`; `src/` never depends on evaluation. Keeping the harness
 independent is what stops the defense from being tuned against its own scorer.
@@ -52,7 +63,13 @@ independent is what stops the defense from being tuned against its own scorer.
 - **Explicit metrics.** Use the definitions in `docs/technical-doc.md` Part VI (BTU, ASR,
   CVR, FBR, UER, plus precision/recall/F1, AUROC/AUPRC, ECE, time-to-detection, latency,
   blast radius). Do not redefine a metric silently; changing a definition invalidates
-  prior comparisons.
+  prior comparisons. Report an imbalance-sensitive metric beside its chance line: AUPRC
+  is meaningless without the base rate next to it.
+- **Anything fitted is fitted out-of-sample, and the fold is the scenario.** A number
+  produced by a model trained on the actions it scores is a report of the fit, not of the
+  thing. Report the raw and fitted versions over the *same* held-out actions, keep the
+  controls that would expose a broken fit (`inverted_folds`), and report a negative
+  result as a result.
 - **Always report a baseline.** Undefended, allow-all, deny-sensitive, and keyword
   baselines give every number a reference point. A number without a baseline says nothing.
 - **Separate raw from processed results.** Raw run outputs are write-once; analysis
