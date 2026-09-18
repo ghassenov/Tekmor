@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Tekmor ---
+# Run artifacts: append-only event logs and per-run outputs.
+/runs/
+*.jsonl
+
+# Generated evaluation outputs (results are reproduced by running the harness).
+/evaluation/results/
+
+# Cached model activations (large, regenerable).
+/.cache/
+*.npy
+*.safetensors
