@@ -72,3 +72,14 @@ def test_yaml_and_json_front_ends_produce_the_same_scenario(tmp_path, scenario):
     )
     assert load_scenario(path) == from_json
 
+
+def test_a_yaml_scenario_loads(scenario):
+    soc = scenario("soc_injection_alert.yaml")
+    assert soc.domain == "soc"
+    assert [step.tool for step in soc.steps] == [
+        "read_alert",
+        "read_secret",
+        "share_indicators",
+        "isolate_host",
+    ]
+    assert soc.steps[1].sources[0].trust is TrustLevel.ADVERSARY_CONTROLLED
