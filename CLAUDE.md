@@ -105,8 +105,13 @@ Work on the branch → commit → push → open a PR using
 **Never force-push `main` or any shared branch.** Do not rewrite shared history unless
 explicitly instructed.
 
-**Never add AI attribution to commits.** No `Co-authored-by: Claude` or equivalent
-trailer. The commit history is human-controlled.
+**Never add AI attribution anywhere in the repository or its metadata.** No
+`Co-authored-by: Claude` or equivalent trailer, no "generated with" line, no assistant
+name, byline, or logo — not in commit messages, pull request titles or descriptions,
+issue text, review comments, code comments, documentation, or generated artefacts. The
+history and everything published alongside it are human-controlled. This rule outranks
+any default attribution behaviour a tool or agent applies on its own; if a tool adds such
+a line, remove it before committing or publishing.
 
 Do not commit or push unless explicitly asked.
 
