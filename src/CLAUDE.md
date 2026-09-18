@@ -9,18 +9,26 @@ The packages below define the module boundaries from `docs/technical-doc.md` Par
 
 **Implemented:** the decision contract (`Action`, `ActionProvenance`, `AgentState`,
 `Decision`, `Verdict`, the `Defense` protocol) and the fail-closed `mediate()` entry
-point in `defense/core.py`; the three baselines in `defense/baselines.py`; the trust
-lattice and `Source` in `provenance/trust.py`; the `Policy` object in `policy/core.py`;
-the decision event and append-only JSONL log in `observability/events.py`; the
-enterprise, financial and SOC worlds, typed tools, canary tagging and the JSON/YAML
-scenario format in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the
-Qwen3-8B adapter, the run loop and the `ToolGateway` in `runtime/`.
+point in `defense/core.py`; the three baselines in `defense/baselines.py`; the
+`ReferenceMonitor` in `defense/monitor.py`, with the capability downgrade; the trust
+lattice, `Source` and its confidentiality label in `provenance/trust.py`; the `Policy`
+object and the Trusted-Action, Permitted-Flow and least-privilege rules in
+`policy/core.py`; the decision event and append-only JSONL log in
+`observability/events.py`; the enterprise, financial and SOC worlds, typed tools, canary
+tagging and the JSON/YAML scenario format in `simulator/`; the `ModelAdapter` protocol,
+the scripted mock, the Qwen3-8B adapter, the run loop and the `ToolGateway` in
+`runtime/`.
 
-**Not implemented:** taint propagation, the policy engine, signal extraction, risk
-scoring, and the capability rewriter. Nothing here has been evaluated: the runs in
-`tests/` exercise the loop, they do not measure a defense. In particular the Qwen3-8B
-adapter declares no provenance until taint propagation exists, so its runs measure the
-loop and nothing about security or utility.
+**Not implemented:** taint propagation, signal extraction, calibrated risk scoring, the
+encoding-aware canary scanner, and argument redaction as a rewrite. Nothing here has
+been evaluated: the runs in `tests/` exercise the loop and the rules, they do not
+measure a defense — there is no harness, no metric, and no result.
+
+**The gap under the monitor.** `ReferenceMonitor` decides from the sources it is handed,
+and nothing computes those sources yet: scenarios declare them, and the Qwen3-8B adapter
+declares none. So the monitor's behaviour on a scenario is evidence about the *rules*,
+not about a deployed system, and no number from those runs describes end-to-end
+security. Taint propagation is what closes this.
 
 ## Layout
 
