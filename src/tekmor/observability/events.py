@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from tekmor.defense.core import Action, ActionProvenance, Decision
+from tekmor.policy.core import Policy
 from tekmor.provenance.trust import TrustLevel
 
 
@@ -32,6 +33,9 @@ class DecisionEvent:
     arg_names: tuple[str, ...]
     source_ids: tuple[str, ...]
     integrity: TrustLevel
+    confidential: bool
+    policy: str
+    policy_version: int
     verdict: str
     reason_codes: tuple[str, ...]
     rewritten_tool: str | None
@@ -46,6 +50,9 @@ class DecisionEvent:
             "arg_names": list(self.arg_names),
             "source_ids": list(self.source_ids),
             "integrity": self.integrity.name,
+            "confidential": self.confidential,
+            "policy": self.policy,
+            "policy_version": self.policy_version,
             "verdict": self.verdict,
             "reason_codes": list(self.reason_codes),
             "rewritten_tool": self.rewritten_tool,
@@ -59,6 +66,7 @@ def decision_event(
     defense: str,
     action: Action,
     provenance: ActionProvenance,
+    policy: Policy,
     decision: Decision,
 ) -> DecisionEvent:
     """Build the event for one decision from the objects the monitor already has."""
@@ -70,6 +78,11 @@ def decision_event(
         arg_names=tuple(action.args),
         source_ids=tuple(s.id for s in provenance.sources),
         integrity=provenance.integrity,
+        confidential=provenance.confidential,
+        # The policy a decision was computed under is part of the decision: a trace
+        # without it cannot be replayed, because the rules may have moved since.
+        policy=policy.name,
+        policy_version=policy.version,
         verdict=decision.verdict.value,
         reason_codes=decision.reason_codes,
         rewritten_tool=decision.rewritten.tool if decision.rewritten else None,
