@@ -39,7 +39,7 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from evaluation.metrics import RunRecord, by_defense, record, table
+from evaluation.metrics import RunRecord, by_defense, calibration, record, table
 from tekmor import __version__
 from tekmor.defense import CanaryScanner, Defense, ReferenceMonitor
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
@@ -180,6 +180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     print(table(metrics))
+    print()
+    print(calibration(metrics))
     print(f"\n{len(records)} runs -> {raw}\n            -> {processed / 'metrics.json'}")
     return 0
 
