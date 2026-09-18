@@ -8,12 +8,13 @@ from its trace.
 
 > **Status: foundation.** This repository contains the technical research report, the
 > engineering standards, and the first slice of the implementation: the decision
-> contract every defense implements, a fail-closed mediation point, the trust lattice,
-> the three baselines (allow-all, deny-sensitive, keyword), the append-only JSONL event
-> log, the three-domain simulator with its scenario format, and the runtime (scripted
-> and Qwen3-8B adapters, run loop, tool gateway). The policy engine, taint propagation,
-> capability rewriter, and evaluation harness are **not implemented yet**, no
-> experiments have been run, and nothing here reports results.
+> contract every defense implements, a fail-closed mediation point, the trust lattice
+> and taint propagation, the policy engine and the reference monitor with its capability
+> downgrade, the three baselines (allow-all, deny-sensitive, keyword), the append-only
+> JSONL event log, the three-domain simulator with its scenario format, and the runtime
+> (scripted and Qwen3-8B adapters, run loop, tool gateway). The encoding-aware canary
+> scanner, calibrated risk scoring, and the evaluation harness are **not implemented
+> yet**, no experiments have been run, and nothing here reports results.
 
 ## What this is
 
