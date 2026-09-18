@@ -87,17 +87,25 @@ class Decision:
     `reason_codes` are coarse and public (the adaptive attacker sees them); fine-grained
     sub-scores belong in the private trace. They are faithful only as long as they name
     the predicates that actually fired, so never add one the decision did not use.
+
+    `risk` is how bad the action looked on the severity scale in `defense/risk.py`, and
+    it is optional because it is honest for a defense not to have one: the baselines
+    emit verdicts and no score, and a metric computed over scores must be able to say
+    "undefined here" rather than read a missing score as zero risk.
     """
 
     verdict: Verdict
     reason_codes: tuple[str, ...]
     rewritten: Action | None = None
+    risk: float | None = None
 
     def __post_init__(self) -> None:
         if (self.verdict is Verdict.REWRITE) != (self.rewritten is not None):
             raise ValueError("a rewritten action is required by REWRITE and only by REWRITE")
         if not self.reason_codes:
             raise ValueError("a decision must name the reasons it was computed from")
+        if self.risk is not None and not 0.0 <= self.risk <= 1.0:
+            raise ValueError(f"risk must be a fraction in [0, 1], got {self.risk!r}")
 
 
 @runtime_checkable
@@ -132,12 +140,15 @@ def mediate(
         decision = defense.decide(state, action, provenance, policy)
     except Exception:
         logger.exception("defense %r raised; failing closed", getattr(defense, "name", defense))
-        return Decision(Verdict.BLOCK, ("INTERNAL_ERROR",))
+        # Risk 1.0 on both fail-closed paths: a monitor that could not answer is the
+        # worst case the scale has, and a trace sorted by risk must not hide it below
+        # the actions the monitor did manage to judge.
+        return Decision(Verdict.BLOCK, ("INTERNAL_ERROR",), risk=1.0)
     if not isinstance(decision, Decision):
         logger.error(
             "defense %r returned %r; failing closed",
             getattr(defense, "name", defense),
             type(decision),
         )
-        return Decision(Verdict.BLOCK, ("MALFORMED_DECISION",))
+        return Decision(Verdict.BLOCK, ("MALFORMED_DECISION",), risk=1.0)
     return decision

@@ -24,7 +24,9 @@ deliberately *layered* rather than folded into the monitor:
 
 **Monotone-safe fusion** (`defense/CLAUDE.md` invariant 4): this only ever *raises*
 suspicion. A BLOCK from the wrapped defense is returned untouched, and the scanner's own
-answer can turn ALLOW or REWRITE into BLOCK but never the reverse.
+answer can turn ALLOW or REWRITE into BLOCK but never the reverse. The same holds for
+the reported risk score, which is raised to this layer's own severity and never lowered
+below what the wrapped defense scored.
 
 **It scans arguments, so it sees only what the call itself carries.** In the financial
 domain what leaves is the *prepared payment*, staged by an earlier non-outbound call, and
@@ -54,8 +56,15 @@ from tekmor.defense.core import (
     Verdict,
     mediate,
 )
+from tekmor.defense.risk import SEVERITY
 from tekmor.policy.core import Policy, permitted_flow, recipients_of
 from tekmor.provenance.canary import appears_in
+
+#: A registered secret found in the argument of a call heading somewhere unauthorized.
+#: Scored as the flow violation it is an instance of (`defense/risk.py`) rather than at
+#: the top of the scale: what this layer adds is *evidence* of that violation where the
+#: labels carried none, not a worse violation than the one the rule already names.
+CANARY_SEVERITY = SEVERITY["CONFIDENTIAL_INFLUENCE"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,4 +122,5 @@ class CanaryScanner:
         return Decision(
             Verdict.BLOCK,
             ("CANARY_IN_OUTBOUND_ARGUMENT", "RECIPIENT_NOT_AUTHORIZED"),
+            risk=max(CANARY_SEVERITY, decision.risk or 0.0),
         )

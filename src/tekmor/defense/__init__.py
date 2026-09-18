@@ -1,8 +1,10 @@
 """Tekmor defense component: the decision contract, the monitor, and the baselines.
 
 `ReferenceMonitor` is the deterministic core of Proposal A: least privilege,
-Permitted-Flow, then Trusted-Action with a capability downgrade. Signal extraction and
-calibrated risk scoring are still Phase 3; see src/CLAUDE.md.
+Permitted-Flow, then Trusted-Action with a capability downgrade. It decides from the
+named `Signals` that `signals.extract` computes, and reports the `risk` score
+`risk.score` derives from that same object — the rules decide, the score describes; see
+`defense/risk.py`.
 
 `CanaryScanner` layers the encoding-aware secret scan (CANARY-FLOW) over any defense,
 for the argument-level residual the provenance rule cannot see.
@@ -20,6 +22,9 @@ from tekmor.defense.core import (
     mediate,
 )
 from tekmor.defense.monitor import ReferenceMonitor
+from tekmor.defense.risk import band, contributions
+from tekmor.defense.risk import score as risk_score
+from tekmor.defense.signals import Signals, extract
 
 __all__ = [
     "Action",
@@ -29,7 +34,12 @@ __all__ = [
     "Decision",
     "Defense",
     "ReferenceMonitor",
+    "Signals",
     "Source",
     "Verdict",
+    "band",
+    "contributions",
+    "extract",
     "mediate",
+    "risk_score",
 ]
