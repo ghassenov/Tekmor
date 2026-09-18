@@ -248,3 +248,123 @@ utility of an approved one.
 **Rejected.** Auto-approving in tests (measures a system nobody would deploy) and
 treating ESCALATE as BLOCK outright (loses the distinction the verdict exists to make,
 and the trace would stop recording which actions needed a human).
+
+---
+
+## 2026-09-18 — YAML scenarios through an optional extra, JSON still native
+
+**Decided.** `load_scenario` accepts `.json`, `.yaml` and `.yml`. YAML is parsed with
+PyYAML (`yaml.safe_load`), declared as the optional extra `yaml` rather than a runtime
+dependency and imported inside the loader; a missing PyYAML raises `ScenarioError`
+naming the extra. `parse_scenario` is unchanged and remains the only definition of the
+format, so both front ends produce the same `Scenario`. Existing JSON scenarios load
+unchanged. This closes the deviation from `technical-doc.md` Part I recorded above.
+
+**Why.** The condition the earlier entry named has arrived: scenarios now carry prose
+(hostile log text, injected invoice notes) where YAML block scalars and comments are the
+difference between a readable fixture and an escaped one-line string. Making it an extra
+keeps `dependencies = []` true for every checkout that does not author YAML, which is
+what the dependency-discipline checklist actually asks for — not that a dependency never
+exists, but that it is not imposed on code that does not need it.
+
+**Rejected.** Making PyYAML a runtime dependency (imposes it on JSON-only users, and the
+defense never touches scenarios). A hand-written YAML subset parser (the reason the
+first entry rejected it stands: YAML's edge cases are where hand-rolled parsers turn a
+fixture into a silently different scenario). Converting the JSON fixtures to YAML —
+scenarios are immutable once results reference them.
+
+**Cost, recorded.** Two syntaxes for one format. The guard is a parity test: a YAML file
+generated from a JSON fixture must load to an equal `Scenario`.
+
+---
+
+## 2026-09-18 — All three domains, each with scenarios
+
+**Decided.** `simulator/domains.py` ships `ENTERPRISE`, `FINANCIAL` (prepare → confirm →
+execute) and `SOC`, each with an attack scenario and a benign hard negative in
+`tests/fixtures/scenarios/`. `World` gains `payments`, `containment` and `tickets`.
+Domains share tool *functions* by reuse under domain-appropriate names.
+
+**Why.** This completes the three-domain simulator that `technical-doc.md` Part I gives
+as Phase 1. The earlier "one domain now" entry deferred the other two until scenarios
+needed them; they arrive here with their scenarios, so the thing that entry was guarding
+against — tool sets written against a guess — does not apply. Each domain earns its
+place by testing something the others cannot: financial has a multi-step action whose
+confirmation step is the attack target, SOC has an attack carried by the log text an
+analyst is required to read.
+
+**The payment lifecycle is a world invariant, not a defense.** `execute_payment` raises
+if the payment was never confirmed. A defense that blocks only the confirmation
+therefore leaves the payment unexecuted, and a scenario that skips confirmation cannot
+report a successful payment. Attack success stays a fact about world state.
+
+**Rejected.** A generic per-tool effect log replacing `sent` / `drafts` / `payments`
+(shorter, but it would rewrite the existing scoring surface and the tests and docs that
+name it, for no new capability). Domain-specific `World` subclasses (one world per run
+is enough; subclassing would put domain knowledge in the state type).
+
+**Reopens if.** A fourth domain arrives, at which point the three sets of effect fields
+on `World` are worth replacing with something uniform.
+
+---
+
+## 2026-09-18 — The Qwen3-8B adapter ships, and declares no provenance
+
+**Decided.** `runtime/qwen.py` holds `Qwen3Adapter`: Transformers (`AutoModelForCausalLM`,
+so residual-stream hooks stay reachable for Proposal C), greedy decoding, thinking mode
+off, one JSON object per turn parsed by `parse_proposal`. Transformers and torch are the
+optional extra `qwen`, imported inside `load()`. An unparseable answer ends the run
+rather than becoming a guessed tool call. The adapter returns `Proposal(action)` with no
+sources.
+
+**Why the empty source set.** A real model's action is influenced by everything it has
+read, and computing that influence is taint propagation, which is Phase 2. Declaring
+sources here would mean inventing provenance, which the trust rules forbid outright.
+Empty is the honest representation, and the lattice already reads the empty meet as
+`ADVERSARY_CONTROLLED`, so it is also the fail-safe one.
+
+**Cost, recorded so no one reports a number from it.** Under a provenance-aware defense
+every action this adapter proposes is maximally tainted. Runs with it exercise the loop,
+the prompt and the latency; they measure neither utility nor security. That stays true
+until taint propagation lands, and the scripted adapter remains what security tests use.
+
+**Rejected.** vLLM or Ollama (faster, but they put the model behind a server and the
+activation hooks Proposal C needs out of reach). Labelling the adapter's sources from
+the tool that produced each observation (that is the propagation, and guessing at it in
+the adapter would hide the Phase 2 gap behind plausible-looking labels).
+
+**The prompt carries one format example.** Without it, the first turn came back as
+`{"done": true}`; with it, the same model answered
+`{"tool": "read_document", "args": {"id": "INV-88"}}`. The example shows the *shape* of a
+call, never the task's arguments.
+
+**Observed, so the claim is not larger than the evidence.** The adapter has been run on
+`Qwen/Qwen3-0.6B` on CPU (torch 2.14+cpu, transformers 5.17): the model loads, the
+Qwen3 chat template applies with thinking disabled, the reply parses, and the action
+goes through `mediate()` and `ToolGateway` to the world, with the trace showing
+`source_ids: []` and integrity `ADVERSARY_CONTROLLED` as designed. Qwen3-8B itself has
+**not** been run — it does not fit on the development machine — and no measurement of
+any kind was taken. `$TEKMOR_QWEN_MODEL` overrides the model the slow test loads.
+
+---
+
+## 2026-09-18 — The tool gateway is a class
+
+**Decided.** `runtime/gateway.py` holds `ToolGateway`, which owns the world, the
+`Approver`, and the verdict handling (`permitted`), and is the single place
+`world.invoke` is called. `runner.run` builds one and calls `execute`. This replaces the
+earlier arrangement where the gateway was the one `world.invoke` call inside the run
+loop.
+
+**Why.** The chokepoint now has more than one caller coming: the evaluation harness, and
+an AgentDojo pipeline element that has its own loop but must not have its own execution
+path. As a function-local block, each of those would re-implement the verdict handling,
+and "unrecognised verdict executes nothing" would hold in as many places as someone
+remembered to write it. As an object it is one testable surface, and the test for a
+verdict the gateway does not know can be written without inventing a `Verdict` member.
+
+**Rejected.** Keeping it inline (the earlier entry's reasoning — one call site is
+readable — still holds, and is preserved: the class has exactly one `world.invoke`).
+Giving the gateway the defense as well, so it would both decide and execute (the
+decision must stay separable from execution, which is what makes `mediate()` testable
+alone).

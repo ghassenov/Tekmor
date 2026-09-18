@@ -9,10 +9,11 @@ from its trace.
 > **Status: foundation.** This repository contains the technical research report, the
 > engineering standards, and the first slice of the implementation: the decision
 > contract every defense implements, a fail-closed mediation point, the trust lattice,
-> the three baselines (allow-all, deny-sensitive, keyword), and the append-only JSONL
-> event log. The policy engine, taint propagation, capability rewriter, simulator,
-> runtime, and evaluation harness are **not implemented yet**, no experiments have been
-> run, and nothing here reports results.
+> the three baselines (allow-all, deny-sensitive, keyword), the append-only JSONL event
+> log, the three-domain simulator with its scenario format, and the runtime (scripted
+> and Qwen3-8B adapters, run loop, tool gateway). The policy engine, taint propagation,
+> capability rewriter, and evaluation harness are **not implemented yet**, no
+> experiments have been run, and nothing here reports results.
 
 ## What this is
 
@@ -88,8 +89,16 @@ uv sync --dev
 cp .env.example .env    # then fill in; .env is gitignored
 ```
 
-The package has no runtime dependencies yet. The mock model backend is the default, so
-nothing so far requires a GPU or an API key.
+The package has no runtime dependencies. Two optional extras exist, each imported only
+by the component that needs it:
+
+```bash
+uv sync --extra yaml    # PyYAML, for YAML scenario files (JSON needs nothing)
+uv sync --extra qwen    # Transformers + torch, for the Qwen3-8B adapter
+```
+
+The scripted model backend is the default, so nothing so far requires a GPU or an API
+key.
 
 ## Development workflow
 
@@ -115,6 +124,10 @@ uv run pytest                  # everything except tests needing a real model
 uv run pytest tests/security   # adversarial tests
 uv run pytest -m slow          # tests needing a real model backend or a GPU
 ```
+
+The model-backed tests load `Qwen/Qwen3-8B` by default. `TEKMOR_QWEN_MODEL` overrides it
+(`TEKMOR_QWEN_MODEL=Qwen/Qwen3-0.6B uv run pytest -m slow` exercises the adapter on CPU),
+which checks the adapter, not the reference agent.
 
 Test categories and their rules are in [`tests/CLAUDE.md`](tests/CLAUDE.md). Security
 tests must include both attacks and benign hard negatives — a defense that blocks

@@ -1,7 +1,6 @@
 """Tekmor simulator component: the synthetic world, typed tools, and scenarios.
 
-The financial and SOC domains and the scenario matrix are later phases; see
-src/CLAUDE.md.
+The scenario matrix and the robustness variants are later phases; see src/CLAUDE.md.
 """
 
 from tekmor.simulator.domains import DOMAINS

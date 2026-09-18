@@ -1,4 +1,4 @@
-"""Scenario fixtures shared by the runtime tests."""
+"""Scenario fixtures shared by the runtime, security, and simulator tests."""
 
 from pathlib import Path
 
@@ -7,6 +7,12 @@ import pytest
 from tekmor.simulator import load_scenario
 
 SCENARIOS = Path(__file__).parent / "fixtures" / "scenarios"
+
+
+@pytest.fixture
+def scenario():
+    """Load a fixture scenario by file name, JSON or YAML."""
+    return lambda name: load_scenario(SCENARIOS / name)
 
 
 @pytest.fixture

@@ -5,11 +5,12 @@ Scope: the synthetic world the agent acts in. Root and `src/` rules apply.
 ## Status
 
 **Implemented:** `world.py` (mutable state, typed tools, canary tagging on outbound
-calls), `domains.py` (the enterprise tool set), `scenario.py` (JSON scenario format and
-its validation).
+calls, the payment lifecycle invariant), `domains.py` (the enterprise, financial and SOC
+tool sets), `scenario.py` (the scenario format, its validation, and the JSON and YAML
+front ends).
 
-**Not implemented:** the financial and SOC domains, the scenario matrix, and robustness
-variants (paraphrase / base64 / hex / spaced / reversed).
+**Not implemented:** the scenario matrix, and robustness variants (paraphrase / base64 /
+hex / spaced / reversed).
 
 ## Rules
 
@@ -25,3 +26,9 @@ variants (paraphrase / base64 / hex / spaced / reversed).
 - Tools are typed and explicit. `outbound` says where the data goes and belongs to the
   tool; *sensitivity* is per-domain judgement and belongs to `Policy`.
 - Scenarios are immutable once results reference them: change means a new `version`.
+- **`parse_scenario` is the only definition of the scenario format.** JSON and YAML are
+  front ends onto it and must produce equal `Scenario` objects; validation never moves
+  into a loader. YAML needs the `yaml` extra and is imported inside `load_scenario`.
+- **Lifecycle constraints belong to the world, not to a defense.** `execute_payment`
+  refuses an unconfirmed payment because that is how payments work, so attack success
+  stays a fact about world state rather than something a defense has to assert.

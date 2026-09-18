@@ -1,9 +1,12 @@
 """The scenario format and its validation."""
 
+import json
+
 import pytest
 
+from conftest import SCENARIOS
 from tekmor.provenance import TrustLevel
-from tekmor.simulator.scenario import ScenarioError, parse_scenario
+from tekmor.simulator.scenario import ScenarioError, load_scenario, parse_scenario
 
 MINIMAL = {
     "id": "s",
@@ -54,3 +57,29 @@ def test_a_malformed_scenario_fails_on_load(change):
     # rather than halfway through a run.
     with pytest.raises(ScenarioError):
         parse_scenario({**MINIMAL, **change})
+
+
+def test_yaml_and_json_front_ends_produce_the_same_scenario(tmp_path, scenario):
+    # The format is defined by parse_scenario, not by the file syntax: a YAML file and
+    # the JSON it came from must load to the same object, or results recorded against
+    # one representation stop being comparable with the other.
+    yaml = pytest.importorskip("yaml")
+    from_json = scenario("enterprise_injection_invoice.json")
+
+    path = tmp_path / "same.yaml"
+    path.write_text(
+        yaml.safe_dump(json.loads((SCENARIOS / "enterprise_injection_invoice.json").read_text()))
+    )
+    assert load_scenario(path) == from_json
+
+
+def test_a_yaml_scenario_loads(scenario):
+    soc = scenario("soc_injection_alert.yaml")
+    assert soc.domain == "soc"
+    assert [step.tool for step in soc.steps] == [
+        "read_alert",
+        "read_secret",
+        "share_indicators",
+        "isolate_host",
+    ]
+    assert soc.steps[1].sources[0].trust is TrustLevel.ADVERSARY_CONTROLLED
