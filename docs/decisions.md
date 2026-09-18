@@ -123,3 +123,59 @@ are not known yet, and building that pipeline now would mean guessing.
 **Rejected.** Matrix builds, coverage gates, and scheduled evaluation runs, all premature.
 
 **Reopens if.** The evaluation harness lands and its runs need to be automated.
+
+---
+
+## 2026-09-18 — The defense fails closed at a single mediation point
+
+**Decided.** Callers never invoke `Defense.decide` directly; they go through
+`tekmor.defense.core.mediate()`, which converts an exception or a malformed return value
+into `BLOCK` with reason code `INTERNAL_ERROR` / `MALFORMED_DECISION`. Relatedly, the
+meet of an empty set of provenance sources is `ADVERSARY_CONTROLLED`, not the top of the
+lattice.
+
+**Why.** "Fail safe: on internal error or missing information, the monitor must not fall
+through to ALLOW" is a property of the *system*, not of each defense implementation. One
+wrapper makes it hold for every defense, including future ones and research prototypes,
+and it is testable in isolation. Unknown provenance is missing information, so it takes
+the same treatment.
+
+**Rejected.** A try/except inside each defense (repeated, and a new defense silently
+opts out) and a decorator on `decide` (same problem, plus it can be forgotten).
+
+**Reopens if.** Escalation to a human turns out to be the better failure mode for some
+error classes — that is a decision about *which* safe verdict, not about failing closed.
+
+---
+
+## 2026-09-18 — Tool sensitivity lives on the policy, not on the tool
+
+**Decided.** `Policy.sensitive_tools` names the tools a domain treats as sensitive. Tool
+definitions in the simulator will carry their capability *variants* (for the rewriter),
+but which calls count as sensitive is policy.
+
+**Why.** The same `send_email` is routine in one deployment and restricted in another;
+binding sensitivity to the tool definition would make per-domain policies unable to
+differ, which is the thing per-domain policies are for.
+
+**Rejected.** A `sensitivity` field on the tool spec, and a global registry of sensitive
+tool names.
+
+**Reopens if.** The capability lattice needs an intrinsic impact ordering per tool that
+policies only narrow — then both exist and this entry says where each lives.
+
+---
+
+## 2026-09-18 — The event log records argument names, never argument values
+
+**Decided.** `DecisionEvent` carries the tool, the argument *names*, the source ids, the
+action's integrity, the verdict, and the reason codes. Argument values are not written.
+
+**Why.** "Never log secrets, credentials, or canary values." There is no canary registry
+yet to redact values against, and a log that is safe only as long as a redactor is
+correct is a worse default than one that cannot leak. Names are enough to reconstruct
+which call was decided on.
+
+**Reopens if.** The simulator's canary registry lands and the trace genuinely needs
+values for debugging — at which point values go through redaction against the registry,
+and the reason codes stay value-free regardless (they are public, per Part VIII).

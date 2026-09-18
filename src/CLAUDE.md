@@ -5,8 +5,17 @@ rules live in `defense/`, `provenance/`, `policy/`, and `observability/`.
 
 ## Status
 
-Scaffolding. The packages below define the module boundaries from
-`docs/technical-doc.md` Part IV; the components themselves are **not implemented**.
+The packages below define the module boundaries from `docs/technical-doc.md` Part IV.
+
+**Implemented:** the decision contract (`Action`, `ActionProvenance`, `AgentState`,
+`Decision`, `Verdict`, the `Defense` protocol) and the fail-closed `mediate()` entry
+point in `defense/core.py`; the three baselines in `defense/baselines.py`; the trust
+lattice in `provenance/trust.py`; the `Policy` object in `policy/core.py`; the decision
+event and append-only JSONL log in `observability/events.py`.
+
+**Not implemented:** taint propagation, the policy engine, signal extraction, risk
+scoring, the capability rewriter, the simulator, and the runtime. Nothing here has been
+evaluated.
 
 ## Layout
 
