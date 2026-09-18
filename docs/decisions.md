@@ -483,3 +483,71 @@ not).
 result, and a Qwen3-8B run measures the loop and the propagation, not a defense: nothing
 in the loop reacts to a verdict, so a blocked model re-proposes the same call.
 
+---
+
+## 2026-09-18 — The canary scanner is encoding-aware, and it is a layer, not the rule
+
+**Decided.** `provenance/canary.py` holds the matcher: `appears_in(secret, text)` is true
+for the plain value however it is spaced, cased or punctuated, for its reverse, for its
+hex, and for its base64 at each of the three byte alignments. `defense/canary.py` holds
+`CanaryScanner`, which wraps any `Defense` and blocks a call that would carry a
+registered secret to a recipient the policy does not authorize. `World.canaries_in` uses
+the same matcher, so CVR is measured across encodings as `docs/technical-doc.md` Part V
+defines it.
+
+**Why it exists at all, given that the monitor already refuses every encoding.** It
+refuses them because the *provenance* of the value is confidential, not because it
+recognised the bytes — which is why no encoding list has to be complete for the monitor
+to hold. The residual is the other direction, and it was recorded in the previous entry:
+a secret that reaches an argument without passing through a labelled observation is
+invisible to a rule that decides from labels. `enterprise_leak_mislabelled.json` is that
+case with no attacker in it — an internal page with a token pasted into it that nobody
+marked confidential. The monitor allows the mail and the canary leaves, and the test that
+says so is a passing test, not a comment.
+
+**Why it wraps rather than being folded into the monitor.** The monitor's claim is that
+it never reads argument text, and that claim is the reason its verdicts are
+encoding-independent; mixing a text matcher in would retire the claim for every decision,
+including the ones that never needed it. A wrapper also gives the Phase 4 ablation
+(core with and without CANARY-FLOW) for free, and keeps a text matcher visibly separate
+from the mechanism this project exists to argue is better than text matchers.
+
+**Monotone-safe fusion is a property of the composition, and it is tested.** The layer
+returns a wrapped BLOCK untouched and can only raise a verdict; every scenario is run
+under the monitor and under the layer and compared verdict by verdict against the
+impact order. It scans the call that would *execute*, not the one proposed, so a
+capability downgrade is not undone by it — blocking a `draft_email` that goes nowhere
+would be a false block invented on top of a verdict that had already contained the
+action.
+
+**It encodes the needle rather than decoding the haystack.** The registry is known, the
+forms are few, and generating them is total and bounded; decoding every base64-looking
+run in a document is neither. The cost is that compositions are not recognised — base64
+of the reversed value, a secret split across two arguments, gzip then base64 — and that
+an argument scan does not see a value routed through world state, which is how the
+financial domain's prepared payment carries one out. Both are recorded in the module and
+reproduced in `tests/security/test_canary_scanner.py` rather than described.
+
+**The measurement now shares code with the mechanism, which is a coupling to watch.** A
+form the matcher cannot see is a leak the scorer cannot see either, so CVR flatters
+exactly the layer it scores. It is still the right trade — the alternative is a scorer
+that under-reports every encoded exfiltration, which flatters *every* defense — and what
+keeps it honest is that the monitor's own rule does not use the matcher, so the headline
+result does not depend on the list being complete.
+
+**The secret registry is a deployment input.** `CanaryScanner` is constructed with the
+values, the way a DLP tool is configured with the organization's secrets. It carries no
+scenario id and no `benign` flag, and deriving it from anything that does would void
+every number measured with it (`src/CLAUDE.md`). The defense name is derived from what it
+wraps (`tekmor+canary`, `allow-all+canary`) so an ablation table cannot key two different
+mechanisms to one row.
+
+**Rejected.** Putting the canary values in `Policy` (they would reach the trace through
+the policy fields the decision event records, and the rule is that a secret never reaches
+the log). Redacting argument values in the log against the registry instead of omitting
+them (that protects the values someone remembered to register and no others). Matching on
+a *pattern* for the canary tag rather than on registered values (it would find test
+canaries only, and the mechanism would not transfer to a real secret).
+
+**Not claimed.** Still nothing measured. There is no harness, no metric and no result;
+CVR is defined and computable here, and it has not been computed over anything.

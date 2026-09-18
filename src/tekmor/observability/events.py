@@ -5,9 +5,10 @@ schema; this carries the fields that exist in the current implementation. Fields
 added as the components that produce them land — an event never claims a signal the
 decision did not use.
 
-Argument *values* are never written. Until the simulator's canary registry exists there
-is nothing to redact them against, and the rule is that secrets and canary values never
-reach the log. Argument names are enough to reconstruct which call was decided on.
+Argument *values* are never written, and the rule holds whether or not a value is a
+known secret: redacting against the canary registry would protect the values someone
+remembered to register and no others, and a trace is not the place to find out which
+those were. Argument names are enough to reconstruct which call was decided on.
 """
 
 from __future__ import annotations
