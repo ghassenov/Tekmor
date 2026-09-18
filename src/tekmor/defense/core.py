@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
 from tekmor.policy.core import Policy
-from tekmor.provenance.trust import TrustLevel, least_trusted
+from tekmor.provenance.trust import Source, TrustLevel, least_trusted
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +35,6 @@ class Action:
 
     tool: str
     args: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class Source:
-    """One observation that influenced an action.
-
-    `origin` is free text naming where the content came from (a tool name, a document
-    id, the user). It is kept because provenance must never be silently reduced to a
-    bare trust level.
-    """
-
-    id: str
-    trust: TrustLevel
-    origin: str = ""
 
 
 @dataclass(frozen=True, slots=True)

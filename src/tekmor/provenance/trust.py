@@ -14,6 +14,7 @@ the lattice itself.
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from enum import IntEnum
 
 
@@ -36,3 +37,21 @@ def least_trusted(levels: Iterable[TrustLevel]) -> TrustLevel:
     than the top.
     """
     return min(levels, default=TrustLevel.ADVERSARY_CONTROLLED)
+
+
+@dataclass(frozen=True, slots=True)
+class Source:
+    """One labelled observation that can influence an action.
+
+    `origin` is free text naming where the content came from (a tool name, a document
+    id, the user). It is kept because provenance must never be silently reduced to a
+    bare trust level.
+
+    It lives here rather than beside the decision contract so that anything producing
+    observations — the simulator, the runtime — can label them without importing the
+    defense.
+    """
+
+    id: str
+    trust: TrustLevel
+    origin: str = ""
