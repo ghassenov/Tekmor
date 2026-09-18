@@ -10,25 +10,32 @@ The packages below define the module boundaries from `docs/technical-doc.md` Par
 **Implemented:** the decision contract (`Action`, `ActionProvenance`, `AgentState`,
 `Decision`, `Verdict`, the `Defense` protocol) and the fail-closed `mediate()` entry
 point in `defense/core.py`; the three baselines in `defense/baselines.py`; the
-`ReferenceMonitor` in `defense/monitor.py`, with the capability downgrade; the trust
-lattice, `Source` and its confidentiality label in `provenance/trust.py`; the `Policy`
+`ReferenceMonitor` in `defense/monitor.py`, with the capability downgrade; the `Policy`
 object and the Trusted-Action, Permitted-Flow and least-privilege rules in
-`policy/core.py`; the decision event and append-only JSONL log in
+`policy/core.py`; the trust lattice, `Source`, its confidentiality label and the
+`TaintTracker` in `provenance/`; the decision event and append-only JSONL log in
 `observability/events.py`; the enterprise, financial and SOC worlds, typed tools, canary
 tagging and the JSON/YAML scenario format in `simulator/`; the `ModelAdapter` protocol,
 the scripted mock, the Qwen3-8B adapter, the run loop and the `ToolGateway` in
 `runtime/`.
 
-**Not implemented:** taint propagation, signal extraction, calibrated risk scoring, the
-encoding-aware canary scanner, and argument redaction as a rewrite. Nothing here has
-been evaluated: the runs in `tests/` exercise the loop and the rules, they do not
-measure a defense — there is no harness, no metric, and no result.
+**Not implemented:** signal extraction, calibrated risk scoring, the encoding-aware
+canary scanner, and argument redaction as a rewrite. Nothing here has been evaluated:
+the runs in `tests/` exercise the loop and the rules, they do not measure a defense —
+there is no harness, no metric, and no result.
 
-**The gap under the monitor.** `ReferenceMonitor` decides from the sources it is handed,
-and nothing computes those sources yet: scenarios declare them, and the Qwen3-8B adapter
-declares none. So the monitor's behaviour on a scenario is evidence about the *rules*,
-not about a deployed system, and no number from those runs describes end-to-end
-security. Taint propagation is what closes this.
+**What taint propagation does and does not close.** The sources the monitor decides from
+are now computed from what the agent actually read: the world labels stored content, a
+tool call returns that label with its result, and `TaintTracker` accumulates it over the
+run. Nothing declares a step's provenance any more, so a verdict on a scenario is
+evidence about the whole path rather than about hand-written labels.
+
+What remains is the *granularity*. Influence is call-level and prefix-monotone — every
+observation the agent has seen taints every later action — so a benign action taken
+after reading one hostile document is labelled by that document. That is the
+conservative direction and the utility cost is real; the benign half of each scenario
+pair is what measures it. Field-level provenance and argument-level attribution are the
+upgrade, and they are not implemented.
 
 ## Layout
 

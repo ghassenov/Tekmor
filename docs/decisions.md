@@ -428,3 +428,58 @@ and belongs with the evaluation harness.
 **Trace.** `DecisionEvent` now carries the policy name and version and the
 confidentiality of the action's provenance. A decision cannot be replayed without the
 policy it was computed under.
+
+---
+
+## 2026-09-18 — Influence is computed from what the agent read, not declared
+
+**Decided.** `provenance/taint.py` holds `TaintTracker`, the set of `Source`s a run has
+observed, seeded with `USER_REQUEST` (`AUTHENTICATED_USER`). The world labels what it
+stores (`Document.trust`, `Document.confidential`) and `World.invoke` returns an
+`Observation` — the text plus the provenance of that text. `ToolGateway.execute` carries
+that source out, and `runner.run` reads the tracker *before* each proposal and updates it
+*after* each execution. `ScriptedStep.sources` and `Proposal` are deleted: an adapter now
+proposes an `Action` and nothing else.
+
+**Why this closes the gap the previous entry recorded.** The monitor decided from
+sources nobody computed — scenarios declared them per step, and the Qwen adapter declared
+none — so a verdict was evidence about the *rules*, not about a path from hostile content
+to a refused action. It is now computed end to end. The evidence that the computation is
+faithful is that every verdict assertion in `tests/security/` passed unchanged when the
+declarations were removed: the propagation reproduces, from the reads alone, the labels
+six scenarios had been asserting by hand.
+
+**The label moved from the step to the document.** Trust belongs to the content — an
+invoice an attacker edited is hostile no matter which call opens it — and a scenario that
+could label a step would be choosing the defense's input, which is the same defect as
+letting a defense read `benign`. `parse_scenario` now rejects a step that declares
+`sources`, so a stale scenario fails loudly instead of running with its labels ignored,
+and rejects a document that states no trust: guessing that label either invents trust or
+turns every scenario into an attack. The dataclass default (`UNTRUSTED_EXTERNAL`) exists
+only for worlds built in code, and content nobody vouched for is not content the
+organization wrote.
+
+**Influence is call-level and prefix-monotone, and that is over-tainting.**
+`provenance/CLAUDE.md` asks that collapsing a result to one label be a deliberate,
+recorded choice; this is the record. Everything the agent has observed taints every later
+action, so a benign action taken after reading one hostile document is labelled by that
+document, and nothing attributes an argument to the observation it came from. The
+direction is the safe one and the model matches the agent's own context — it cannot
+unsee what it read, and trust does not rise through a summary or a round trip. The cost
+is utility, measured by the benign half of each scenario pair rather than asserted away.
+Field-level provenance on tool results and argument-level attribution are the upgrade,
+and neither is implemented.
+
+**Rejected.** Keeping the declarations as an override when the adapter offers none (two
+providers for one field, and the override is exactly the one a scenario author would
+reach for to make a test pass). Labelling observations inside the runtime by inspecting
+the tool name (the world is the only thing that knows where a document came from;
+guessing it upstream would hide the label behind plausible-looking code). Making
+`Observation` a `str` subclass so call sites would not change (the label would vanish
+silently through any string operation, which reads as taint tracking through text and is
+not).
+
+**Not claimed.** Nothing here is measured. There is still no harness, no metric and no
+result, and a Qwen3-8B run measures the loop and the propagation, not a defense: nothing
+in the loop reacts to a verdict, so a blocked model re-proposes the same call.
+
