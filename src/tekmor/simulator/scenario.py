@@ -74,7 +74,38 @@ def _source(data: Mapping[str, Any]) -> Source:
         trust = TrustLevel[name]
     except KeyError:
         raise ScenarioError(f"unknown trust level {name!r}") from None
-    return Source(id=_require(data, "id", str), trust=trust, origin=str(data.get("origin", "")))
+    return Source(
+        id=_require(data, "id", str),
+        trust=trust,
+        origin=str(data.get("origin", "")),
+        confidential=bool(data.get("confidential", False)),
+    )
+
+
+def _policy(data: Mapping[str, Any], outbound: frozenset[str]) -> Policy:
+    """Build the policy, defaulting `outbound_tools` to the domain's own outbound tools.
+
+    Where a tool sends data is a property of the tool, so a scenario that restated it
+    could disagree with the world it runs against. The default comes from the domain's
+    tool specs; a scenario may still state the set explicitly, which is how a policy that
+    treats an extra tool as outbound gets written.
+    """
+    level = data.get("min_integrity", "TRUSTED_INTERNAL")
+    try:
+        min_integrity = TrustLevel[level]
+    except (KeyError, TypeError):
+        raise ScenarioError(f"unknown trust level {level!r}") from None
+    return Policy(
+        name=_require(data, "name", str),
+        sensitive_tools=frozenset(data.get("sensitive_tools", ())),
+        allowed_tools=frozenset(data.get("allowed_tools", ())),
+        outbound_tools=frozenset(data.get("outbound_tools", outbound)),
+        min_integrity=min_integrity,
+        authorized_recipients=frozenset(data.get("authorized_recipients", ())),
+        recipient_args=frozenset(data.get("recipient_args", ("to",))),
+        rewrites=dict(data.get("rewrites", {})),
+        version=_require(data, "version", int) if "version" in data else 1,
+    )
 
 
 def parse_scenario(data: Mapping[str, Any]) -> Scenario:
@@ -87,6 +118,7 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
     if domain not in DOMAINS:
         raise ScenarioError(f"unknown domain {domain!r}; have {sorted(DOMAINS)}")
     tools = {tool.name for tool in DOMAINS[domain]}
+    outbound = frozenset(tool.name for tool in DOMAINS[domain] if tool.outbound)
 
     steps = []
     for raw in _require(data, "steps", list):
@@ -101,17 +133,26 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
             )
         )
 
-    policy = _require(data, "policy", dict)
+    policy = _policy(_require(data, "policy", dict), outbound)
+    named = (
+        policy.sensitive_tools
+        | policy.allowed_tools
+        | policy.outbound_tools
+        | set(policy.rewrites)
+        | set(policy.rewrites.values())
+    )
+    # A typo in a policy is silent otherwise: an unknown name in `allowed_tools` blocks
+    # work, and one in `sensitive_tools` un-guards a tool that was meant to be guarded.
+    if named - tools:
+        raise ScenarioError(f"policy names {sorted(named - tools)}, not tools of domain {domain!r}")
+
     return Scenario(
         id=_require(data, "id", str),
         version=_require(data, "version", int),
         domain=domain,
         task=_require(data, "task", str),
         benign=_require(data, "benign", bool),
-        policy=Policy(
-            name=_require(policy, "name", str),
-            sensitive_tools=frozenset(policy.get("sensitive_tools", ())),
-        ),
+        policy=policy,
         documents=dict(data.get("documents", {})),
         canaries=dict(data.get("canaries", {})),
         steps=tuple(steps),
