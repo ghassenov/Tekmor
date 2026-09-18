@@ -12,14 +12,15 @@ The packages below define the module boundaries from `docs/technical-doc.md` Par
 point in `defense/core.py`; the three baselines in `defense/baselines.py`; the trust
 lattice and `Source` in `provenance/trust.py`; the `Policy` object in `policy/core.py`;
 the decision event and append-only JSONL log in `observability/events.py`; the
-enterprise-domain world, typed tools, canary tagging and JSON scenario format in
-`simulator/`; the `ModelAdapter` protocol, the scripted mock, and the run loop in
-`runtime/`.
+enterprise, financial and SOC worlds, typed tools, canary tagging and the JSON/YAML
+scenario format in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the
+Qwen3-8B adapter, the run loop and the `ToolGateway` in `runtime/`.
 
 **Not implemented:** taint propagation, the policy engine, signal extraction, risk
-scoring, the capability rewriter, the financial and SOC domains, and the Qwen3-8B
-adapter. Nothing here has been evaluated: the runs in `tests/` exercise the loop, they
-do not measure a defense.
+scoring, and the capability rewriter. Nothing here has been evaluated: the runs in
+`tests/` exercise the loop, they do not measure a defense. In particular the Qwen3-8B
+adapter declares no provenance until taint propagation exists, so its runs measure the
+loop and nothing about security or utility.
 
 ## Layout
 
@@ -53,3 +54,6 @@ do not measure a defense.
   Research code lives in `research/`; promote it by refactoring, not by importing.
 - Type-annotate public interfaces. Prefer plain dataclasses and stdlib types until a
   concrete need justifies a dependency.
+- **Optional dependencies are imported inside the component that needs them**, never at
+  module import time, and are declared as an extra in `pyproject.toml` (`yaml`, `qwen`).
+  `dependencies = []` stays true for a checkout that does not use those components.
