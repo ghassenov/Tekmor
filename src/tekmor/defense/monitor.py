@@ -55,9 +55,10 @@ class ReferenceMonitor:
     copy of a secret was still influenced by the read that produced it.
 
     The reverse is the honest limitation, and it is the one to measure: the monitor sees
-    only the sources it is handed. Where those sources come from is taint propagation,
-    which is not implemented — scenarios declare them, and the Qwen adapter declares
-    none at all.
+    only the sources it is handed, and taint propagation hands it call-level influence.
+    A value that reached an argument without passing through a labelled observation is
+    invisible here, and an action taken after reading hostile content is labelled by it
+    whether or not that content had anything to do with the action.
     """
 
     name: str = "tekmor"

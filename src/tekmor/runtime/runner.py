@@ -8,6 +8,11 @@ The loop decides nothing and executes nothing itself: `mediate()` produces the v
 and `ToolGateway` is the only thing that touches the world. What is left here is the
 order of those steps, which is what makes "nothing reaches the world undecided"
 checkable by reading one function.
+
+It does own one thing: the run's `TaintTracker`. An action's provenance is what the
+agent has read *before* proposing it, so the tracker is read before the call and
+updated after it — which is also why an adapter cannot state its own provenance and a
+blocked call adds no influence.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from dataclasses import dataclass
 from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Defense
 from tekmor.defense.core import mediate
 from tekmor.observability import EventLog, decision_event
+from tekmor.provenance.taint import TaintTracker
 from tekmor.runtime.gateway import Approver, ToolGateway, deny
 from tekmor.runtime.model import ModelAdapter, ScriptedModel
 from tekmor.simulator.scenario import Scenario
@@ -64,6 +70,7 @@ def run(
     adapter = adapter or ScriptedModel(scenario.steps)
     run_id = run_id or f"{scenario.id}@{scenario.version}:{defense.name}"
 
+    taint = TaintTracker()
     observations: list[str] = []
     outcomes: list[StepOutcome] = []
 
@@ -71,30 +78,30 @@ def run(
         # The state deliberately carries the task and the step index and nothing else:
         # no scenario id, no expected outcome, nothing a defense could recognise.
         state = AgentState(task=scenario.task, step=step)
-        proposal = adapter.propose(state, tuple(observations))
-        if proposal is None:
+        action = adapter.propose(state, tuple(observations))
+        if action is None:
             break
 
-        provenance = ActionProvenance.of(proposal.sources)
-        decision = mediate(defense, state, proposal.action, provenance, scenario.policy)
+        provenance = ActionProvenance.of(taint.sources)
+        decision = mediate(defense, state, action, provenance, scenario.policy)
         if log is not None:
             log.append(
                 decision_event(
                     run_id,
                     step,
                     defense.name,
-                    proposal.action,
+                    action,
                     provenance,
                     scenario.policy,
                     decision,
                 )
             )
 
-        run_step = gateway.execute(proposal.action, decision)
+        run_step = gateway.execute(action, decision)
+        if run_step.source is not None:
+            taint.observe(run_step.source)
         outcomes.append(
-            StepOutcome(
-                proposal.action, decision, run_step.executed, run_step.result, run_step.error
-            )
+            StepOutcome(action, decision, run_step.executed, run_step.result, run_step.error)
         )
         observations.append(run_step.result or run_step.error or decision.verdict.value)
 

@@ -9,13 +9,12 @@ Transformers and torch are an optional extra (`uv sync --extra qwen`), imported 
 `load()` so the package still installs with no runtime dependencies and the default test
 run never sees them.
 
-**What a run with this adapter measures.** The loop, the prompt, and the latency — not
-the defense. A real model's actions are influenced by everything it has read, and
-computing that influence is taint propagation (Phase 2). Until it exists this adapter
-declares no sources, so every action it proposes has the integrity of the empty meet,
-`ADVERSARY_CONTROLLED`. That is the fail-safe reading of missing provenance, and it is
-also a useless one for measurement: a provenance-aware defense will treat every action
-as maximally tainted. Do not report security or utility numbers from these runs.
+**What a run with this adapter measures.** The loop, the prompt, the latency, and now
+the provenance — an action it proposes carries the labels of everything the run has read
+before it (`tekmor.provenance.taint`), computed by the runner rather than declared here.
+What it still does not measure is a defense: nothing in the loop reacts to a verdict, so
+a blocked model re-proposes the same call until `max_steps`. Do not report security or
+utility numbers from these runs.
 """
 
 from __future__ import annotations
@@ -27,7 +26,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from tekmor.defense import Action, AgentState
-from tekmor.runtime.model import Proposal
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +95,7 @@ class Qwen3Adapter:
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.model = AutoModelForCausalLM.from_pretrained(self.model_id, device_map="auto")
 
-    def propose(self, state: AgentState, observations: Sequence[str]) -> Proposal | None:
+    def propose(self, state: AgentState, observations: Sequence[str]) -> Action | None:
         self.load()
         messages = [
             {
@@ -126,6 +124,6 @@ class Qwen3Adapter:
             # end the run: a guessed tool call would be an action nobody proposed.
             logger.info("no action proposed (%r); ending the run", text[:200])
             return None
-        # No sources: see the module docstring. Phase 2 taint propagation is what fills
-        # this in; declaring anything here would be inventing provenance.
-        return Proposal(action)
+        # The action alone: what influenced it is the runner's to compute, and an
+        # adapter that stated its own provenance would be inventing it.
+        return action

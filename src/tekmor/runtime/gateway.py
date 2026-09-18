@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from tekmor.defense import Action, Decision, Verdict
+from tekmor.provenance.trust import Source
 from tekmor.simulator.world import World
 
 #: The simulated human an ESCALATE goes to. Denying is the safe default, and a run that
@@ -33,11 +34,17 @@ def deny(action: Action) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Execution:
-    """What the gateway did with one decided action."""
+    """What the gateway did with one decided action.
+
+    `source` is the provenance of `result`, carried out of the world so the caller can
+    add it to the run's taint. It is `None` when nothing executed or the call failed:
+    there is no observation to have been influenced by.
+    """
 
     executed: Action | None
     result: str | None = None
     error: str | None = None
+    source: Source | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +73,7 @@ class ToolGateway:
         if allowed is None:
             return Execution(None)
         try:
-            return Execution(allowed, result=self.world.invoke(allowed.tool, allowed.args))
+            observation = self.world.invoke(allowed.tool, allowed.args)
+            return Execution(allowed, result=observation.text, source=observation.source)
         except Exception as exc:  # a bad call is an outcome, not a crashed run
             return Execution(allowed, error=f"{type(exc).__name__}: {exc}")
