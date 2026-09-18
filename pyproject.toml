@@ -34,13 +34,17 @@ packages = ["src/tekmor"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+# `.` as well, so `evaluation/` is first-party to the import sorter like the rest.
+src = ["src", "tests", "."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repository root, so `tests/evaluation/` can import the harness. `evaluation/` is
+# not part of the installed package: it depends on `tekmor`, never the reverse.
+pythonpath = ["."]
 # `slow` is excluded by default: those tests load a real model backend, and the default
 # `uv run pytest` must not start a multi-gigabyte download. `-m slow` on the command line
 # overrides this.
