@@ -20,6 +20,12 @@ The ordering of the checks is the design, and it is fixed:
    to an injection is not always "stop working": the SOC analyst still gets a ticket,
    and the drafted mail is still there for a human to send.
 
+The policy predicates are evaluated once, into `signals.Signals`, and both the verdict
+and the reported risk score are read off that one object. That is deliberate: a score
+derived from a second evaluation of the same predicates could drift from the decision it
+is printed next to. The score never changes the verdict — the rules below do, in the
+order below — and `risk.band()` is the claim that the two agree, asserted by test.
+
 Everything this decides is computed from the four inputs it is handed. It never sees the
 scenario, the world, the file it came from, or whether the run is supposed to be an
 attack.
@@ -36,14 +42,9 @@ from tekmor.defense.core import (
     Decision,
     Verdict,
 )
-from tekmor.policy.core import (
-    Policy,
-    downgrade_for,
-    permitted_flow,
-    permitted_tool,
-    recipients_of,
-    trusted_action,
-)
+from tekmor.defense.risk import score as risk_score
+from tekmor.defense.signals import Signals, extract
+from tekmor.policy.core import Policy
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,37 +71,47 @@ class ReferenceMonitor:
         provenance: ActionProvenance,
         policy: Policy,
     ) -> Decision:
-        if not permitted_tool(action.tool, policy):
-            return Decision(Verdict.BLOCK, ("TOOL_NOT_PERMITTED",))
+        return self.judge(extract(state, action, provenance, policy), action)
 
-        if not permitted_flow(
-            action.tool,
-            provenance.confidential,
-            recipients_of(action.args, policy),
-            policy,
-        ):
+    def judge(self, signals: Signals, action: Action) -> Decision:
+        """The rules themselves, over already-extracted signals.
+
+        Separate from `decide` so that the rule ordering can be tested, and a risk
+        contribution explained, against a `Signals` value written by hand — without
+        assembling a policy and a provenance set to reach one branch.
+        """
+        risk = risk_score(signals)
+
+        if not signals.tool_permitted:
+            return Decision(Verdict.BLOCK, ("TOOL_NOT_PERMITTED",), risk=risk)
+
+        if not signals.flow_permitted:
             # The recipient itself is left out of the reason codes: they are public, and
             # a destination is part of what the run is trying to keep in.
             return Decision(
                 Verdict.BLOCK,
                 ("CONFIDENTIAL_INFLUENCE", "OUTBOUND_TOOL", "RECIPIENT_NOT_AUTHORIZED"),
+                risk=risk,
             )
 
-        if not trusted_action(action.tool, provenance.integrity, policy):
+        if not signals.integrity_sufficient:
             violation = ("TARGET_TOOL_SENSITIVE", "ACTION_INTEGRITY_BELOW_THRESHOLD")
-            downgrade = downgrade_for(action.tool, policy)
-            if downgrade is None:
-                return Decision(Verdict.ESCALATE, (*violation, "NO_CAPABILITY_DOWNGRADE"))
+            if signals.downgrade is None:
+                return Decision(
+                    Verdict.ESCALATE, (*violation, "NO_CAPABILITY_DOWNGRADE"), risk=risk
+                )
             # Arguments travel unchanged: the downgrade is of the *capability*, and the
             # variant is chosen to accept the same call. Argument redaction is a separate
             # rewrite that does not exist yet.
             return Decision(
                 Verdict.REWRITE,
                 (*violation, "CAPABILITY_DOWNGRADE"),
-                Action(downgrade, action.args),
+                Action(signals.downgrade, action.args),
+                risk=risk,
             )
 
         return Decision(
             Verdict.ALLOW,
             ("TOOL_PERMITTED", "PERMITTED_FLOW_SATISFIED", "TRUSTED_ACTION_SATISFIED"),
+            risk=risk,
         )

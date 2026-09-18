@@ -13,10 +13,10 @@ from its trace.
 > downgrade, the encoding-aware canary scanner, the three baselines (allow-all,
 > deny-sensitive, keyword), the append-only JSONL event log, the three-domain simulator
 > with its scenario format, the runtime (scripted and Qwen3-8B adapters, run loop, tool
-> gateway), and the evaluation harness that scores all of it. Calibrated risk scoring
-> and its calibration metrics are **not implemented yet**; the numbers below come from
-> this repository's own seven-scenario matrix, which is not a benchmark, and no external
-> benchmark, robustness variant or adaptive attacker has been run.
+> gateway), the risk score and its calibration metrics, and the evaluation harness that
+> scores all of it. The numbers below come from this repository's own seven-scenario
+> matrix, which is not a benchmark, and no external benchmark, robustness variant or
+> adaptive attacker has been run.
 
 ## What this is
 
@@ -126,6 +126,24 @@ attack halves), scripted adapter, reproduced by the command above:
 | tekmor | 1.00 | 0.25 | 0.14 | 0.00 | 0.00 |
 | tekmor+canary | 1.00 | 0.00 | 0.00 | 0.00 | 0.00 |
 
+Per *action* rather than per run: did the defense flag the actions that reach the
+attacker's goal, and does its risk score rank them above the rest? The label is derived
+by replaying each scenario prefix undefended, so it is the same under every row. AUROC
+and ECE are null for a defense that reports no score.
+
+| defense | precision | recall | F1 | AUROC | ECE |
+|---|---|---|---|---|---|
+| allow-all | n/a | 0.00 | n/a | n/a | n/a |
+| deny-sensitive | 0.40 | 1.00 | 0.57 | n/a | n/a |
+| keyword | 0.50 | 0.50 | 0.50 | n/a | n/a |
+| tekmor | 0.60 | 0.75 | 0.67 | 0.83 | 0.11 |
+| tekmor+canary | 0.67 | 1.00 | 0.80 | 0.99 | 0.07 |
+
+Precision is the row to read carefully: the label marks the step that *reaches* the
+attacker's goal, so an intervention earlier in the same injected chain counts against
+precision even though it is what stopped the attack. Both of `tekmor`'s false positives
+are that case, and none of them is a benign action (FBR is 0.00).
+
 Read it as a sanity check on the mechanism, not as a result about prompt injection in
 general: seven scenarios, scripted agents, and attacks written by the same person who
 wrote the defense. The one attack `tekmor` misses is the mislabelled-secret scenario —
@@ -166,14 +184,13 @@ Test categories and their rules are in [`tests/CLAUDE.md`](tests/CLAUDE.md). Sec
 tests must include both attacks and benign hard negatives — a defense that blocks
 everything is a failure, so false-block rate is a headline metric.
 
-## Evaluation
+## Planned evidence
 
-Not built yet. The planned metrics (defined in `docs/technical-doc.md` Part VI) are
-benign task utility (BTU), attack success rate (ASR), canary violation rate (CVR),
-false-block rate (FBR), and unnecessary escalation rate (UER), alongside calibration
-(ECE) and time-to-detection. Planned evidence is Tekmor's own scenarios with paraphrase,
-encoding, and adaptive-attacker variants, plus [AgentDojo](https://agentdojo.spylab.ai)
-as external validation.
+The metrics above are the ones defined in `docs/technical-doc.md` Part VI; AUPRC,
+intervention latency and blast radius are still unimplemented. What is missing is not a
+metric but evidence: paraphrase, encoding and adaptive-attacker variants of every
+scenario, the ablation grid, a model-driven agent instead of the scripted one, and
+[AgentDojo](https://agentdojo.spylab.ai) as external validation.
 
 Evaluation rules — reproducibility, versioned scenarios, baselines, raw/processed
 separation, and no hand-edited results — are in

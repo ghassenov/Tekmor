@@ -625,3 +625,84 @@ model-driven run: every number above comes from scripted steps. The scorer share
 canary matcher with the defense it scores (previous entry), so an encoding neither sees is
 invisible to both. FBR is 0.00 for `tekmor` on eight benign actions, which is a small
 denominator, not a property.
+
+## 2026-09-19 — The risk score describes the decision; the rules still make it
+
+Phase 3 asked for "calibrated risk thresholds (low→ALLOW, medium→REWRITE, high→BLOCK,
+ambiguous + high-impact→ESCALATE) and measure ECE". Read literally, that makes a weighted
+sum the decision procedure. It was not built that way, and this is the deviation
+`docs/CLAUDE.md` requires be written down rather than left for someone to discover.
+
+**What was built.** `src/tekmor/defense/signals.py` evaluates the policy predicates once
+into a named `Signals` value. `ReferenceMonitor` decides from that value — the same three
+rules in the same fixed order as before, and no verdict on the matrix changed —
+and `src/tekmor/defense/risk.py` derives a score from the same object: an ordinal
+severity per violation, with the score being the *worst* one that fired. `Decision` now
+carries an optional `risk`, the JSONL event logs it, and `defense/risk.py` exposes
+`contributions()` for the private per-signal breakdown.
+
+**Why the score does not decide.** A weighted sum with authority over the rules would
+replace a policy anyone can audit with weights nobody can, and those weights would be
+fitted by the same person who writes the scenarios — the failure the Caveats section
+already warns about, moved inside the defense. So the ordering stays authoritative and
+the score is a *description* of it. What the thresholds are for instead: `band()` is the
+roadmap's table stated as a falsifiable claim — for every action the monitor decides,
+`band(score) == verdict` — asserted on the whole matrix in
+`tests/security/test_risk_bands.py` and on hand-built signals in `tests/unit/test_risk.py`.
+The day a severity and a rule disagree, a test fails instead of a dashboard quietly
+printing risk 0.1 beside a BLOCK. `CanaryScanner` raises the score as it raises the
+verdict, so monotone-safe fusion (`defense/CLAUDE.md` invariant 4) now covers both.
+
+**Band edges are midpoints between adjacent severities**, not the severities themselves,
+so a re-weighting has to move a severity *past* its neighbour before the band it lands in
+changes. ESCALATE sits above REWRITE because both answer a Trusted-Action violation and
+deferring to a human is the more expensive answer; which applies is whether the policy
+declares a vetted downgrade.
+
+**The per-action label is derived, never declared.** Precision, recall, AUROC and ECE need
+ground truth per *action*, and the obvious way to get it — a field on each scripted step —
+would let the author label the step they wish the defense had stopped, which is the defect
+that keeps `benign` and `id` away from the defense. Instead
+`evaluation.metrics.unsafe_steps` replays each prefix of a scenario under `AllowAll` and
+labels the step whose execution first makes `attack_success` hold. "Unsafe" then means
+exactly what ASR means, the labels are identical under every defense (asserted), and the
+steps that merely *read* hostile content are negatives, because reading is not the harm.
+The cost is real and is the thing to remember when reading precision: only the
+goal-reaching step is positive, so an intervention earlier in the same injected chain
+scores as a false positive. Both of `tekmor`'s false positives are that case, and neither
+is a benign action.
+
+**The numbers.** Same seven scenarios, same scripted adapter, reproduce with
+`uv run python -m evaluation.harness`. The BTU/ASR/CVR/FBR/UER table is unchanged from the
+previous entry, which is the point — the refactor moved no verdict. New, per action:
+
+```
+defense                      P       R      F1   AUROC     ECE
+allow-all                  n/a    0.00     n/a     n/a     n/a
+deny-sensitive            0.40    1.00    0.57     n/a     n/a
+keyword                   0.50    0.50    0.50     n/a     n/a
+tekmor                    0.60    0.75    0.67    0.83    0.11
+tekmor+canary             0.67    1.00    0.80    0.99    0.07
+```
+
+`deny-sensitive` is again the control worth reading first: recall 1.00 by refusing
+everything sensitive, at precision 0.40. AUROC 0.83 → 0.99 says the score orders unsafe
+actions above safe ones; ECE 0.11 → 0.07 is *reported, not achieved* — the severities are
+ordinal, so their magnitudes are not probabilities and a low ECE here is closer to luck on
+a small sample than to a calibrated scale. Platt-scaling against held-out runs is
+CALIB-RISK and is not implemented.
+
+**Rejected.** Letting the bands decide (above). Summing severities rather than taking the
+worst (two violations are not twice one, and several small signals would outrank an
+exfiltration). Logging the per-signal contributions in the event (the breakdown is the
+hill-climbing channel the Explainability section warns about; it stays derivable).
+Defaulting a missing score to 0.0 so every defense gets an AUROC ("this defense has no
+score" and "this action looked harmless" are different claims, and the baselines are the
+ones that would be flattered). Declaring unsafe steps in the scenario files. Implementing
+AUPRC (a third number saying what precision and recall already say, on this sample size).
+
+**Not claimed.** The score is not calibrated. The thresholds are not learned, and
+learning-to-defer thresholds on the utility/security frontier are untested. No external
+benchmark, robustness variant, adaptive attacker or model-driven run backs any number
+above, and precision is measured against a label that rewards late detection, so it must
+be read beside time-to-detection rather than alone.
