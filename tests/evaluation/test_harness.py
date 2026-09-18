@@ -12,7 +12,7 @@ import json
 import pytest
 
 from evaluation.harness import SCENARIOS, evaluate, load_matrix, main
-from evaluation.metrics import auroc, by_defense, ece, score, unsafe_steps
+from evaluation.metrics import auprc, auroc, by_defense, ece, score, unsafe_steps
 
 
 def metrics():
@@ -155,6 +155,29 @@ def test_detection_and_separation_are_reported_only_where_they_are_defined():
     # the metric that cannot tell those apart, and precision is the one that can.
     assert results["deny-sensitive"].recall == 1.0
     assert results["deny-sensitive"].precision < results["tekmor"].precision
+
+
+def test_average_precision_is_reported_against_its_own_chance_line():
+    results = metrics()
+
+    # AUROC is insensitive to how rare the positives are; AUPRC is not, which is why
+    # both are here. The number AUPRC has to beat is the prevalence, and reporting one
+    # without the other is what makes an unbalanced result look better than it is.
+    assert results["tekmor"].base_rate is not None
+    assert results["tekmor"].auprc > results["tekmor"].base_rate
+    assert results["tekmor+canary"].auprc > results["tekmor"].auprc
+    # A defense with no score has no curve, the same as for AUROC and ECE.
+    assert results["allow-all"].auprc is None and results["allow-all"].base_rate is None
+
+
+def test_average_precision_is_the_area_under_the_curve_ties_held_together():
+    # Perfect ranking retrieves both positives before either negative.
+    assert auprc([0.9, 0.8, 0.2, 0.1], [True, True, False, False]) == 1.0
+    # A score that says nothing lands on the base rate rather than on 1: the tie is one
+    # point on the curve, not the luckiest ordering inside it.
+    assert auprc([0.5] * 4, [True, False, False, False]) == pytest.approx(0.25)
+    # Nothing to retrieve, so no curve. Null, not zero.
+    assert auprc([0.9, 0.1], [False, False]) is None
 
 
 def test_the_score_orders_the_unsafe_actions_above_the_safe_ones():
