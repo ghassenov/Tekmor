@@ -1,8 +1,8 @@
 """The `ModelAdapter` interface and the deterministic mock behind every test.
 
 `docs/technical-doc.md` Part I: a mock model for fast deterministic tests, and a
-Qwen3-8B backend for real runs. The Qwen3-8B adapter is not here — it needs a model
-dependency and there is nothing to measure with it yet.
+Qwen3-8B backend for real runs. The Qwen3-8B adapter lives in `qwen.py`, behind an
+optional extra; this module is the interface and the mock every test uses.
 
 An adapter proposes actions. It never decides anything: the decision is `mediate()`'s,
 and an adapter cannot see the verdict except through the observation it gets back.
