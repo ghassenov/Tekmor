@@ -1,33 +1,26 @@
-"""The run loop, and the gateway that is the world's only door.
+"""The run loop.
 
 `docs/technical-doc.md` Part I: scenario + world + policy → runner → the agent proposes
 an action → Tekmor decides → escalations go to a simulated human, approved actions go
 to the tool gateway → world state updates → events are logged.
 
-The gateway is not a class. It is the single `world.invoke` call below, reached only
-after `mediate()` returned a verdict that permits it — one call site is what makes
-"nothing reaches the world undecided" checkable by reading the function.
+The loop decides nothing and executes nothing itself: `mediate()` produces the verdict
+and `ToolGateway` is the only thing that touches the world. What is left here is the
+order of those steps, which is what makes "nothing reaches the world undecided"
+checkable by reading one function.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
-from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Defense, Verdict
+from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Defense
 from tekmor.defense.core import mediate
 from tekmor.observability import EventLog, decision_event
+from tekmor.runtime.gateway import Approver, ToolGateway, deny
 from tekmor.runtime.model import ModelAdapter, ScriptedModel
 from tekmor.simulator.scenario import Scenario
 from tekmor.simulator.world import World
-
-#: The simulated human an ESCALATE goes to. Denying is the safe default, and a run that
-#: needs approvals says so by passing its own.
-Approver = Callable[[Action], bool]
-
-
-def deny(action: Action) -> bool:
-    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,17 +43,6 @@ class RunResult:
     world: World
 
 
-def _approved(decision: Decision, action: Action, approver: Approver) -> Action | None:
-    """The action to execute, or `None`. Anything unrecognised executes nothing."""
-    if decision.verdict is Verdict.ALLOW:
-        return action
-    if decision.verdict is Verdict.REWRITE:
-        return decision.rewritten
-    if decision.verdict is Verdict.ESCALATE and approver(action):
-        return action
-    return None
-
-
 def run(
     scenario: Scenario,
     defense: Defense,
@@ -78,6 +60,7 @@ def run(
     that differ differ because the defense did.
     """
     world = scenario.world()
+    gateway = ToolGateway(world, approver)
     adapter = adapter or ScriptedModel(scenario.steps)
     run_id = run_id or f"{scenario.id}@{scenario.version}:{defense.name}"
 
@@ -99,14 +82,12 @@ def run(
                 decision_event(run_id, step, defense.name, proposal.action, provenance, decision)
             )
 
-        executed = _approved(decision, proposal.action, approver)
-        result = error = None
-        if executed is not None:
-            try:
-                result = world.invoke(executed.tool, executed.args)
-            except Exception as exc:  # a bad call is an outcome, not a crashed run
-                error = f"{type(exc).__name__}: {exc}"
-        outcomes.append(StepOutcome(proposal.action, decision, executed, result, error))
-        observations.append(result or error or decision.verdict.value)
+        run_step = gateway.execute(proposal.action, decision)
+        outcomes.append(
+            StepOutcome(
+                proposal.action, decision, run_step.executed, run_step.result, run_step.error
+            )
+        )
+        observations.append(run_step.result or run_step.error or decision.verdict.value)
 
     return RunResult(run_id, scenario.id, defense.name, tuple(outcomes), world)
