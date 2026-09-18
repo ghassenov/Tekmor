@@ -79,7 +79,15 @@ def run(
         decision = mediate(defense, state, proposal.action, provenance, scenario.policy)
         if log is not None:
             log.append(
-                decision_event(run_id, step, defense.name, proposal.action, provenance, decision)
+                decision_event(
+                    run_id,
+                    step,
+                    defense.name,
+                    proposal.action,
+                    provenance,
+                    scenario.policy,
+                    decision,
+                )
             )
 
         run_step = gateway.execute(proposal.action, decision)

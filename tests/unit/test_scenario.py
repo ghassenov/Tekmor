@@ -31,6 +31,23 @@ def test_parses_sources_into_trust_levels():
     assert scenario.policy.sensitive_tools == frozenset({"send_email"})
 
 
+def test_outbound_tools_come_from_the_domain_not_from_the_scenario():
+    # Where a tool sends data is a property of the tool. A scenario that restated it
+    # could disagree with the world it runs against, so the default is the domain's own
+    # tool specs.
+    assert parse_scenario(MINIMAL).policy.outbound_tools == frozenset({"send_email"})
+
+
+def test_a_source_may_be_labelled_confidential():
+    step = {**MINIMAL["steps"][0]}
+    step["sources"] = [{**step["sources"][0], "confidential": True}]
+    scenario = parse_scenario({**MINIMAL, "steps": [step]})
+    assert scenario.steps[0].sources[0].confidential is True
+    # And it is off unless the scenario says so: labelling everything confidential would
+    # block every outbound call.
+    assert parse_scenario(MINIMAL).steps[0].sources[0].confidential is False
+
+
 def test_loaded_scenario_has_the_expected_shape(attack_scenario):
     assert attack_scenario.benign is False
     assert [step.tool for step in attack_scenario.steps] == [
@@ -49,8 +66,22 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
         {"steps": [{**MINIMAL["steps"][0], "sources": [{"id": "x", "trust": "SEMI_TRUSTED"}]}]},
         {"version": "1"},
         {"benign": "yes"},
+        {"policy": {**MINIMAL["policy"], "allowed_tools": ["send_emails"]}},
+        {"policy": {**MINIMAL["policy"], "rewrites": {"send_email": "draff_email"}}},
+        {"policy": {**MINIMAL["policy"], "min_integrity": "SEMI_TRUSTED"}},
     ],
-    ids=["unknown domain", "tool not in domain", "unknown trust", "bad version", "bad benign"],
+    ids=[
+        "unknown domain",
+        "tool not in domain",
+        "unknown trust",
+        "bad version",
+        "bad benign",
+        # A typo in a policy is silent otherwise: an unknown name in `allowed_tools`
+        # blocks work, and one in `rewrites` quietly removes the downgrade.
+        "policy names a tool the domain does not have",
+        "rewrite target not in the domain",
+        "unknown integrity threshold",
+    ],
 )
 def test_a_malformed_scenario_fails_on_load(change):
     # A scenario is an input the rest of the run trusts; it fails here, with a message,
