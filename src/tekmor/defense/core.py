@@ -41,8 +41,9 @@ class Action:
 class ActionProvenance:
     """The observations that influenced a candidate action.
 
-    Field-level provenance and how this set is computed are Phase 2. What the decision
-    core needs is the set and its meet.
+    How the set is computed is `tekmor.provenance.taint`'s business, not the decision
+    core's: what the decision needs is the set and its meet. Field-level provenance
+    within one observation is the remaining granularity gap, recorded in `src/CLAUDE.md`.
     """
 
     sources: tuple[Source, ...] = ()

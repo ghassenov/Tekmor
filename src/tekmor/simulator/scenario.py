@@ -9,6 +9,12 @@ A scenario carries metadata the *scorer* needs (`id`, `version`, `benign`) and c
 the *run* needs (world, policy, steps). Only the second group ever reaches the defense:
 a defense that can read `id` or `benign` can recognise its test cases, which is the one
 thing that would make every later number meaningless.
+
+Trust is declared on the *documents*, never on the steps. What influenced an action is
+computed from what the agent read (`tekmor.provenance.taint`), so a scenario states
+where its content came from and the run works out the rest. A scenario that could label
+a step would be choosing the defense's input, which is the same defect as letting the
+defense read `benign`.
 """
 
 from __future__ import annotations
@@ -20,9 +26,9 @@ from pathlib import Path
 from typing import Any
 
 from tekmor.policy.core import Policy
-from tekmor.provenance.trust import Source, TrustLevel
+from tekmor.provenance.trust import TrustLevel
 from tekmor.simulator.domains import DOMAINS
-from tekmor.simulator.world import World
+from tekmor.simulator.world import Document, World
 
 
 class ScenarioError(ValueError):
@@ -31,17 +37,10 @@ class ScenarioError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class ScriptedStep:
-    """One action the scripted agent proposes, with the sources that influenced it.
-
-    Declaring the influencing sources is a Phase 1 stand-in: taint propagation computes
-    them from what the agent actually read (Phase 2). Until then the scenario author
-    states them, which keeps the decision core testable without pretending the
-    propagation exists.
-    """
+    """One action the scripted agent proposes."""
 
     tool: str
     args: Mapping[str, Any]
-    sources: tuple[Source, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +51,7 @@ class Scenario:
     task: str
     benign: bool
     policy: Policy
-    documents: Mapping[str, str]
+    documents: Mapping[str, Document]
     canaries: Mapping[str, str]
     steps: tuple[ScriptedStep, ...]
 
@@ -68,17 +67,27 @@ def _require(data: Mapping[str, Any], key: str, kind: type) -> Any:
     return value
 
 
-def _source(data: Mapping[str, Any]) -> Source:
-    name = _require(data, "trust", str)
+def _trust(name: Any) -> TrustLevel:
     try:
-        trust = TrustLevel[name]
-    except KeyError:
+        return TrustLevel[name]
+    except (KeyError, TypeError):
         raise ScenarioError(f"unknown trust level {name!r}") from None
-    return Source(
-        id=_require(data, "id", str),
-        trust=trust,
-        origin=str(data.get("origin", "")),
-        confidential=bool(data.get("confidential", False)),
+
+
+def _document(name: str, value: Any) -> Document:
+    """Build a labelled document. The label is required, not defaulted.
+
+    A scenario file is the trust boundary of the whole format, and an unlabelled
+    document is the one thing that cannot be guessed at: too high invents trust, too low
+    turns every scenario into an attack. So it fails here, where the message can say
+    which document.
+    """
+    if not isinstance(value, Mapping):
+        raise ScenarioError(f"document {name!r} must state its trust: {{text: ..., trust: ...}}")
+    return Document(
+        text=_require(value, "text", str),
+        trust=_trust(value.get("trust")),
+        confidential=bool(value.get("confidential", False)),
     )
 
 
@@ -90,11 +99,7 @@ def _policy(data: Mapping[str, Any], outbound: frozenset[str]) -> Policy:
     tool specs; a scenario may still state the set explicitly, which is how a policy that
     treats an extra tool as outbound gets written.
     """
-    level = data.get("min_integrity", "TRUSTED_INTERNAL")
-    try:
-        min_integrity = TrustLevel[level]
-    except (KeyError, TypeError):
-        raise ScenarioError(f"unknown trust level {level!r}") from None
+    min_integrity = _trust(data.get("min_integrity", "TRUSTED_INTERNAL"))
     return Policy(
         name=_require(data, "name", str),
         sensitive_tools=frozenset(data.get("sensitive_tools", ())),
@@ -125,13 +130,14 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         tool = _require(raw, "tool", str)
         if tool not in tools:
             raise ScenarioError(f"step calls {tool!r}, not a tool of domain {domain!r}")
-        steps.append(
-            ScriptedStep(
-                tool=tool,
-                args=dict(_require(raw, "args", dict)),
-                sources=tuple(_source(s) for s in _require(raw, "sources", list)),
+        if "sources" in raw:
+            # Loudly, because a stale scenario would otherwise keep passing while the
+            # labels it declares are silently ignored.
+            raise ScenarioError(
+                f"step {tool!r} declares sources; label the documents instead — "
+                "influence is computed from what the agent reads"
             )
-        )
+        steps.append(ScriptedStep(tool=tool, args=dict(_require(raw, "args", dict))))
 
     policy = _policy(_require(data, "policy", dict), outbound)
     named = (
@@ -153,7 +159,9 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         task=_require(data, "task", str),
         benign=_require(data, "benign", bool),
         policy=policy,
-        documents=dict(data.get("documents", {})),
+        documents={
+            name: _document(name, value) for name, value in data.get("documents", {}).items()
+        },
         canaries=dict(data.get("canaries", {})),
         steps=tuple(steps),
     )

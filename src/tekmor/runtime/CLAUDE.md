@@ -10,9 +10,9 @@ apply.
 approver), `runner.py` (the run loop), `qwen.py` (the Qwen3-8B adapter, behind the
 `qwen` extra, with residual-stream hooks left reachable for Proposal C).
 
-**Not implemented:** anything that reacts to a verdict. The Qwen3-8B adapter declares no
-sources until taint propagation lands, so its runs measure the loop, not a defense — do
-not report utility or security numbers from them.
+**Not implemented:** anything that reacts to a verdict. A blocked model re-proposes the
+same call until `max_steps`, so a Qwen3-8B run measures the loop, the prompt and the
+propagation, not a defense — do not report utility or security numbers from them.
 
 **Exercised on:** `Qwen/Qwen3-0.6B` on CPU (torch 2.14+cpu, transformers 5.17), which is
 a check of the adapter, not of the reference agent. Qwen3-8B has not been run. The slow
@@ -44,8 +44,9 @@ TEKMOR_QWEN_MODEL=Qwen/Qwen3-0.6B uv run pytest -m slow
   identifiers, expected outcomes, or anything else a defense could recognise.
 - Every decision is logged when a log is given, before the action executes.
 - Tests use `ScriptedModel`. Anything needing a real backend is marked `slow`.
-- **An adapter never invents provenance.** If it cannot say what influenced an action,
-  it declares no sources and the lattice reads that as `ADVERSARY_CONTROLLED`.
+- **An adapter proposes an action and nothing else.** Provenance is the runner's, read
+  off the run's `TaintTracker` before the call and updated from the observation after
+  it. An adapter that could state its own sources could declare itself trusted.
 - **A blocked action is only bounded by `max_steps`.** A real adapter re-proposes what it
   just had blocked, because the observation it gets back is the verdict string and
   nothing in the loop reacts to it. Observed on the 0.6B run; it is why `max_steps`

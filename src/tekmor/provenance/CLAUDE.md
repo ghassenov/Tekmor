@@ -2,6 +2,22 @@
 
 Scope: trust labelling and taint propagation. Root and `src/` rules apply.
 
+## Status
+
+**Implemented:** `trust.py` (the lattice, its meet, and `Source` with its integrity and
+confidentiality labels), `taint.py` (`TaintTracker`: the influences accumulated over one
+run, seeded with the request that asked for the work).
+
+**Not implemented:** field-level provenance, and the endorsement primitive.
+
+**The deliberate coarseness, recorded as the rules below require.** Influence is
+call-level and prefix-monotone: an observation the agent has seen taints every action it
+proposes afterwards, so a benign action taken after reading one hostile document carries
+that document's label. The world labels whole observations rather than fields, and no
+argument is attributed to the observation it was copied from. This is the conservative
+direction, it is over-tainting, and the benign half of each scenario pair in
+`tests/security/` is what measures the cost. See `docs/decisions.md`.
+
 ## Trust lattice
 
 ```

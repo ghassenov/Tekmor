@@ -5,10 +5,12 @@ The scenario matrix and the robustness variants are later phases; see src/CLAUDE
 
 from tekmor.simulator.domains import DOMAINS
 from tekmor.simulator.scenario import Scenario, ScriptedStep, load_scenario
-from tekmor.simulator.world import Tool, UnknownTool, World
+from tekmor.simulator.world import Document, Observation, Tool, UnknownTool, World
 
 __all__ = [
     "DOMAINS",
+    "Document",
+    "Observation",
     "Scenario",
     "ScriptedStep",
     "Tool",
