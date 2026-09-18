@@ -1,10 +1,9 @@
-"""Tekmor provenance component: the trust lattice and the labelled source.
+"""Tekmor provenance component: the trust lattice, labelled sources, and taint.
 
-Taint propagation through memory and tool-output fields is the remaining Phase 2 piece;
-until it lands, sources are declared by whatever produced the observation. See
-src/CLAUDE.md.
+See src/CLAUDE.md.
 """
 
+from tekmor.provenance.taint import USER_REQUEST, TaintTracker
 from tekmor.provenance.trust import Source, TrustLevel, least_trusted
 
-__all__ = ["Source", "TrustLevel", "least_trusted"]
+__all__ = ["USER_REQUEST", "Source", "TaintTracker", "TrustLevel", "least_trusted"]
