@@ -10,12 +10,16 @@ The packages below define the module boundaries from `docs/technical-doc.md` Par
 **Implemented:** the decision contract (`Action`, `ActionProvenance`, `AgentState`,
 `Decision`, `Verdict`, the `Defense` protocol) and the fail-closed `mediate()` entry
 point in `defense/core.py`; the three baselines in `defense/baselines.py`; the trust
-lattice in `provenance/trust.py`; the `Policy` object in `policy/core.py`; the decision
-event and append-only JSONL log in `observability/events.py`.
+lattice and `Source` in `provenance/trust.py`; the `Policy` object in `policy/core.py`;
+the decision event and append-only JSONL log in `observability/events.py`; the
+enterprise-domain world, typed tools, canary tagging and JSON scenario format in
+`simulator/`; the `ModelAdapter` protocol, the scripted mock, and the run loop in
+`runtime/`.
 
 **Not implemented:** taint propagation, the policy engine, signal extraction, risk
-scoring, the capability rewriter, the simulator, and the runtime. Nothing here has been
-evaluated.
+scoring, the capability rewriter, the financial and SOC domains, and the Qwen3-8B
+adapter. Nothing here has been evaluated: the runs in `tests/` exercise the loop, they
+do not measure a defense.
 
 ## Layout
 
