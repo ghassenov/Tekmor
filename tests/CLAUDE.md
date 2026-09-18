@@ -10,7 +10,10 @@ Scope: automated tests. Root rules apply.
 | `integration/` | interaction between components (runtime → defense → gateway → log) |
 | `security/` | adversarial and security-sensitive behavior |
 | `evaluation/` | the benchmark/evaluation infrastructure itself, not research results |
-| `fixtures/` | reusable inputs and controlled datasets |
+
+Scenario files live in `evaluation/scenarios/` and are loaded through the `scenario`
+fixtures in `conftest.py`. They are the same files the harness scores: a private copy
+under `tests/` would let a scenario drift out from under one of the two.
 
 Create a directory when it has its first test; do not pre-create empty ones.
 
