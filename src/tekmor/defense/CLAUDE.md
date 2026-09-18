@@ -24,6 +24,23 @@ These hold for every decision. Breaking one is a security bug, not a style issue
    provenance, policy, and observed content — never on scenario IDs, filenames, or
    expected outcomes.
 
+## Risk scoring
+
+- The score is computed from the same `Signals` value the decision is, and it **reports**
+  rather than decides: `ReferenceMonitor` reaches its verdict from the rules in their
+  fixed order, and a weighted sum must never be able to overrule one. Weights nobody can
+  audit replacing a policy anyone can is the failure mode to avoid.
+- `risk.band()` is therefore a *claim* about the rules — every verdict must fall in the
+  band of its own score — and it is asserted by test on the whole scenario matrix. A new
+  severity that lands in the wrong band is a test failure, not a dashboard oddity.
+- Severities are ordinal, not probabilities. Report ECE; do not call the scale calibrated
+  until it has been scaled against held-out runs.
+- A secondary sensor may only raise the score, exactly as it may only raise the verdict
+  (invariant 4). `CanaryScanner` is the existing example.
+- The **aggregate** score is public and belongs in the trace; the per-signal
+  contributions (`risk.contributions`) are the private half, for the same reason coarse
+  reason codes are public and fine-grained ones are not.
+
 ## Action decisions
 
 - The four outcomes are policy/action control, not classification labels. REWRITE is a
