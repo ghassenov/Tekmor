@@ -706,3 +706,137 @@ learning-to-defer thresholds on the utility/security frontier are untested. No e
 benchmark, robustness variant, adaptive attacker or model-driven run backs any number
 above, and precision is measured against a label that rewards late detection, so it must
 be read beside time-to-detection rather than alone.
+
+## Calibration, average precision, and a trace someone can read
+
+**Context.** The risk score existed and was measured (AUROC, ECE) but never *converted*:
+its severities are ordinal, so "0.9" meant "worse than 0.7" and nothing about how often
+an action scoring 0.9 is actually unsafe. Two of the metrics the technical doc asks for
+were still missing (AUPRC, and the calibration CALIB-RISK describes), and the trace could
+only be read as JSONL by someone who already knew the schema — the timeline and
+provenance graph from Part V did not exist.
+
+**AUPRC is implemented, reversing the entry above that rejected it.** The reason it was
+rejected — a third number saying what precision and recall already say — was wrong about
+which question it answers. Unsafe actions are 19% of the scored actions on this matrix,
+and AUROC is insensitive to that imbalance, so it is the number most likely to flatter a
+defense on data shaped like this. AUPRC is not: its chance line is the prevalence, so it
+is reported *next to* `base_rate` in the same table, and a report that shows one without
+the other is the thing actually worth rejecting. Ties are one point on the curve rather
+than several, for the same reason AUROC counts them as half a win: the severities take a
+handful of values, and walking through a tie group one action at a time would score the
+luckiest ordering the score never claimed.
+
+**CALIB-RISK: Platt scaling is implemented, leave-one-scenario-out, and it does not
+help here.** `evaluation/calibration.py` fits `P(unsafe | score) = 1/(1 + exp(a·s + b))`
+by Newton's method with the smoothed targets of Platt (1999) in the stable form of Lin,
+Weng & Lin (2007). The smoothing is not a detail at this size: the severities were built
+to separate, so a separable sample is the ordinary case and an unsmoothed fit would run
+to infinity and report certainty it has no evidence for.
+
+The fold is the **scenario**, not the action. Actions inside one run share a world, a
+policy and an injected chain, so an action-level split would put an action's near-twin in
+the training half and report a calibration that will not survive a new scenario. Every
+reported probability is out-of-sample, and the raw column is recomputed over exactly the
+held-out actions, so the before/after comparison is between two scales rather than
+between two samples.
+
+The result is negative and is reported as such:
+
+```
+defense                    ECE    ECE'   Brier  Brier'   AUROC  AUROC'   folds       n     inv
+tekmor                    0.11    0.12    0.09    0.10    0.83    0.75       7      21       0
+tekmor+canary             0.07    0.10    0.04    0.04    0.99    0.99       7      21       0
+```
+
+Platt scaling makes ECE *worse* on this matrix (0.11 → 0.12, 0.07 → 0.10). The reading is
+not that calibration is wrong but that there is not enough data to fit it: twenty-one
+scored actions, four of them positive, and a fit re-estimated from six scenarios each
+time. `tekmor`'s AUROC moving 0.83 → 0.75 under the scaling is the direct measurement of
+that instability — each fold applies its own map, so the gap between those two columns is
+how far the fit travels when one scenario is swapped out, and on a stable fit it would be
+zero. The honest conclusion is that the ordinal scale is not improved by calibrating it
+against seven scenarios, and that CALIB-RISK needs the larger matrix before its claim can
+be tested rather than merely computed.
+
+**The per-fold invariant is the one that holds.** A single Platt map with `a < 0` is
+monotone and cannot change AUROC; leave-one-scenario-out applies seven maps, so it can.
+The invariant asserted instead is that no fold fitted `a >= 0` — a fold that learned to
+read the risk score backwards — reported as `inverted_folds` and asserted in
+`tests/evaluation/test_calibration.py`. A nonzero count invalidates the calibrated
+columns rather than denting them.
+
+**Calibrating still does not let the score decide.** The other half of proposal 7 —
+learning-to-defer thresholds that escalate on calibrated uncertainty — would hand a
+weighted fit authority over a verdict the rules produce, which is the trade declined in
+the entry above and declined again here. The score describes; it now describes on a
+probability scale, and on this matrix a worse one.
+
+**The trace is rendered, from the trace alone.**
+`src/tekmor/observability/viewer.py` writes one self-contained HTML page per log: a
+timeline table per run (observation + trust → action → policy → decision → outcome) and
+an inline-SVG provenance graph whose edges are coloured by the trust of the source they
+come from and drawn dashed into any action the gateway did not execute — the cut the
+technical doc describes, visible. The harness writes one beside every `decisions.jsonl`.
+
+It reads the JSONL and **nothing else**: not the scenario, not `benign`, not the world.
+That is what makes it a way to discover what the schema is missing rather than a second
+source of truth, and it is why the viewer cannot say whether a decision was *correct* —
+that question belongs to the harness, and a debugging tool that answered it would
+quietly become a scorer. Everything interpolated is escaped, attributes included: tool
+names, source ids and origins are derived from content the threat model calls
+adversary-controlled, so the page an analyst opens to read an attack is a trust boundary.
+No D3, no vis.js, no CDN — the doc suggests them, and a static page of a finished run
+needs neither; the collapsing is `<details>`.
+
+**The event schema is at version 2, and the log now says so.** Two breaking changes,
+both forced by rendering the trace:
+
+- `source_ids` became `sources`, each with its trust, origin and confidentiality. The
+  meet is still there as `integrity` because that is what the decision was computed from,
+  but a trace carrying only the meet cannot say *which* read dragged it down, which is
+  the question a provenance graph exists to answer. A schema-1 log still renders; its
+  sources read as trust `UNKNOWN`, because a reader that picked a level for them would be
+  inventing provenance.
+- `outcome` was added: `executed`, `not_executed`, or `failed`. Three words, never the
+  tool's result or its error message — a result is exactly the content that may carry a
+  secret.
+
+**Consequence, recorded because it reverses a rule in `src/tekmor/runtime/CLAUDE.md`:**
+the decision event is now written *after* the gateway acts, not before, so one event
+covers the whole step. The cost is that a crash between deciding and executing loses the
+line instead of recording a decision nothing acted on. That is acceptable because the
+gateway turns a failing tool into an outcome rather than an exception, and because a
+missing step index is visible in a way a wrong one is not. The alternative — a second
+event type joined on (run, step) — buys the same completeness for a join in every reader.
+
+**The numbers.** Same seven scenarios, same scripted adapter, reproduce with
+`uv run python -m evaluation.harness`. BTU/ASR/CVR/FBR/UER are unchanged; the detection
+table gains average precision and its chance line:
+
+```
+defense                      P       R      F1   AUROC   AUPRC  chance     ECE
+allow-all                  n/a    0.00     n/a     n/a     n/a     n/a     n/a
+deny-sensitive            0.40    1.00    0.57     n/a     n/a     n/a     n/a
+keyword                   0.50    0.50    0.50     n/a     n/a     n/a     n/a
+tekmor                    0.60    0.75    0.67    0.83    0.74    0.19    0.11
+tekmor+canary             0.67    1.00    0.80    0.99    0.95    0.19    0.07
+```
+
+AUPRC 0.74 and 0.95 against a chance line of 0.19: the ranking is well above the
+prevalence, which is the claim AUROC was already making and the one AUROC could not have
+made honestly on data this unbalanced.
+
+**Rejected.** Letting calibrated probabilities set thresholds (above). An action-level
+train/test split (leaks a near-twin into training). Reporting a calibrated ECE against a
+raw ECE computed over a different set of actions (compares samples, not scales). Dropping
+the raw columns once the calibrated ones existed (the comparison *is* the result, and here
+the result is that the raw scale wins). A second event type for outcomes (a join in every
+reader for the same completeness). Guessing a trust level for schema-1 sources. Logging
+the tool result or the error message in `outcome`. A charting dependency for the viewer.
+
+**Not claimed.** The risk score is still not calibrated — it is now *measured against* a
+calibration, and the measurement says the ordinal scale is better than the fit on this
+sample. Selective escalation is untested. The viewer has been read by its author on this
+repository's own output and by nobody else; it is a debugging and explanation tool, not
+evidence about anything.

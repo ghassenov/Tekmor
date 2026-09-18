@@ -115,6 +115,15 @@ decision events, per-run records and a manifest (commit, environment, input hash
 are deterministic: the scripted adapter replays the scenario's steps and the simulated
 human denies every escalation.
 
+It also writes a `timeline.html` beside the decision log — the security timeline and the
+provenance graph, rendered from the JSONL and nothing else. Open it to watch hostile
+content flow toward a sensitive call and see the edge cut where the monitor stopped it.
+Any log renders on its own:
+
+```bash
+uv run python -m tekmor.observability.viewer evaluation/results/raw/<timestamp>/decisions.jsonl
+```
+
 Measured on the seven-scenario matrix in this repository (three domains, benign and
 attack halves), scripted adapter, reproduced by the command above:
 
@@ -128,21 +137,39 @@ attack halves), scripted adapter, reproduced by the command above:
 
 Per *action* rather than per run: did the defense flag the actions that reach the
 attacker's goal, and does its risk score rank them above the rest? The label is derived
-by replaying each scenario prefix undefended, so it is the same under every row. AUROC
-and ECE are null for a defense that reports no score.
+by replaying each scenario prefix undefended, so it is the same under every row. AUROC,
+AUPRC and ECE are null for a defense that reports no score. `chance` is the share of
+scored actions that are unsafe — the line AUPRC has to beat, and the reason AUPRC is
+printed next to it rather than alone.
 
-| defense | precision | recall | F1 | AUROC | ECE |
-|---|---|---|---|---|---|
-| allow-all | n/a | 0.00 | n/a | n/a | n/a |
-| deny-sensitive | 0.40 | 1.00 | 0.57 | n/a | n/a |
-| keyword | 0.50 | 0.50 | 0.50 | n/a | n/a |
-| tekmor | 0.60 | 0.75 | 0.67 | 0.83 | 0.11 |
-| tekmor+canary | 0.67 | 1.00 | 0.80 | 0.99 | 0.07 |
+| defense | precision | recall | F1 | AUROC | AUPRC | chance | ECE |
+|---|---|---|---|---|---|---|---|
+| allow-all | n/a | 0.00 | n/a | n/a | n/a | n/a | n/a |
+| deny-sensitive | 0.40 | 1.00 | 0.57 | n/a | n/a | n/a | n/a |
+| keyword | 0.50 | 0.50 | 0.50 | n/a | n/a | n/a | n/a |
+| tekmor | 0.60 | 0.75 | 0.67 | 0.83 | 0.74 | 0.19 | 0.11 |
+| tekmor+canary | 0.67 | 1.00 | 0.80 | 0.99 | 0.95 | 0.19 | 0.07 |
 
 Precision is the row to read carefully: the label marks the step that *reaches* the
 attacker's goal, so an intervention earlier in the same injected chain counts against
 precision even though it is what stopped the attack. Both of `tekmor`'s false positives
 are that case, and none of them is a benign action (FBR is 0.00).
+
+Is the risk score a *probability*, or only a ranking? `evaluation/calibration.py`
+Platt-scales it leave-one-scenario-out — fit on six scenarios, score the seventh, repeat
+— and reports the raw and calibrated numbers over the same held-out actions. The answer
+here is a negative result, reported rather than tuned away:
+
+| defense | ECE | ECE' | Brier | Brier' | AUROC | AUROC' | folds | n |
+|---|---|---|---|---|---|---|---|---|
+| tekmor | 0.11 | 0.12 | 0.09 | 0.10 | 0.83 | 0.75 | 7 | 21 |
+| tekmor+canary | 0.07 | 0.10 | 0.04 | 0.04 | 0.99 | 0.99 | 7 | 21 |
+
+Calibrating makes it slightly *worse*. Twenty-one scored actions, four of them positive,
+is not enough to fit a sigmoid: `tekmor`'s AUROC moving 0.83 → 0.75 across folds measures
+exactly how far the fit travels when one scenario is swapped out. The hand-ordered
+ordinal scale stays in use, and CALIB-RISK needs the larger matrix before its claim can
+be tested rather than merely computed.
 
 Read it as a sanity check on the mechanism, not as a result about prompt injection in
 general: seven scenarios, scripted agents, and attacks written by the same person who
