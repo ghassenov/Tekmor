@@ -15,19 +15,14 @@ MINIMAL = {
     "benign": True,
     "task": "t",
     "policy": {"name": "enterprise", "sensitive_tools": ["send_email"]},
-    "steps": [
-        {
-            "tool": "send_email",
-            "args": {"to": "a@example.com"},
-            "sources": [{"id": "user:request", "trust": "AUTHENTICATED_USER"}],
-        }
-    ],
+    "documents": {"INV-1": {"text": "4 200 EUR", "trust": "TRUSTED_INTERNAL"}},
+    "steps": [{"tool": "send_email", "args": {"to": "a@example.com"}}],
 }
 
 
-def test_parses_sources_into_trust_levels():
+def test_parses_document_labels_into_trust_levels():
     scenario = parse_scenario(MINIMAL)
-    assert scenario.steps[0].sources[0].trust is TrustLevel.AUTHENTICATED_USER
+    assert scenario.documents["INV-1"].trust is TrustLevel.TRUSTED_INTERNAL
     assert scenario.policy.sensitive_tools == frozenset({"send_email"})
 
 
@@ -38,14 +33,13 @@ def test_outbound_tools_come_from_the_domain_not_from_the_scenario():
     assert parse_scenario(MINIMAL).policy.outbound_tools == frozenset({"send_email"})
 
 
-def test_a_source_may_be_labelled_confidential():
-    step = {**MINIMAL["steps"][0]}
-    step["sources"] = [{**step["sources"][0], "confidential": True}]
-    scenario = parse_scenario({**MINIMAL, "steps": [step]})
-    assert scenario.steps[0].sources[0].confidential is True
+def test_a_document_may_be_labelled_confidential():
+    documents = {"INV-1": {**MINIMAL["documents"]["INV-1"], "confidential": True}}
+    scenario = parse_scenario({**MINIMAL, "documents": documents})
+    assert scenario.documents["INV-1"].confidential is True
     # And it is off unless the scenario says so: labelling everything confidential would
     # block every outbound call.
-    assert parse_scenario(MINIMAL).steps[0].sources[0].confidential is False
+    assert parse_scenario(MINIMAL).documents["INV-1"].confidential is False
 
 
 def test_loaded_scenario_has_the_expected_shape(attack_scenario):
@@ -55,7 +49,7 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
         "read_secret",
         "send_email",
     ]
-    assert attack_scenario.steps[1].sources[0].trust is TrustLevel.ADVERSARY_CONTROLLED
+    assert attack_scenario.documents["INV-91"].trust is TrustLevel.ADVERSARY_CONTROLLED
 
 
 @pytest.mark.parametrize(
@@ -63,7 +57,9 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
     [
         {"domain": "trading_floor"},
         {"steps": [{**MINIMAL["steps"][0], "tool": "wire_transfer"}]},
-        {"steps": [{**MINIMAL["steps"][0], "sources": [{"id": "x", "trust": "SEMI_TRUSTED"}]}]},
+        {"documents": {"INV-1": {"text": "x", "trust": "SEMI_TRUSTED"}}},
+        {"documents": {"INV-1": "an unlabelled document"}},
+        {"steps": [{**MINIMAL["steps"][0], "sources": [{"id": "x", "trust": "TRUSTED_INTERNAL"}]}]},
         {"version": "1"},
         {"benign": "yes"},
         {"policy": {**MINIMAL["policy"], "allowed_tools": ["send_emails"]}},
@@ -74,6 +70,11 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
         "unknown domain",
         "tool not in domain",
         "unknown trust",
+        # Guessing a label is the one thing the loader must not do: too high invents
+        # trust, too low turns every scenario into an attack.
+        "unlabelled document",
+        # A stale scenario would otherwise keep passing with its labels ignored.
+        "step declares its own sources",
         "bad version",
         "bad benign",
         # A typo in a policy is silent otherwise: an unknown name in `allowed_tools`
@@ -113,4 +114,4 @@ def test_a_yaml_scenario_loads(scenario):
         "share_indicators",
         "isolate_host",
     ]
-    assert soc.steps[1].sources[0].trust is TrustLevel.ADVERSARY_CONTROLLED
+    assert soc.documents["ALERT-4"].trust is TrustLevel.ADVERSARY_CONTROLLED

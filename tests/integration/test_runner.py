@@ -1,7 +1,7 @@
 """runtime → defense → gateway → log, end to end on the scripted adapter."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Verdict
 from tekmor.defense.baselines import AllowAll, DenySensitive
@@ -88,3 +88,36 @@ def test_a_broken_defense_fails_closed_through_the_runner(benign_scenario):
 
 def test_run_id_is_deterministic_for_a_scenario_and_defense(benign_scenario):
     assert run(benign_scenario, AllowAll()).run_id == run(benign_scenario, AllowAll()).run_id
+
+
+def source_ids(log):
+    return [json.loads(line)["source_ids"] for line in log.path.read_text().splitlines()]
+
+
+def test_provenance_is_computed_from_what_the_agent_read(attack_scenario, tmp_path):
+    # The whole point of taint propagation: nothing declares these labels, the run works
+    # them out from the reads it performed. The first action has only the request that
+    # asked for it; each later one carries everything read before it.
+    log = EventLog(tmp_path / "events.jsonl")
+    run(attack_scenario, AllowAll(), log=log)
+
+    assert source_ids(log) == [
+        ["user:request"],
+        ["user:request", "doc:INV-91"],
+        ["user:request", "doc:INV-91", "secret:portal_token"],
+    ]
+
+
+def test_an_action_that_never_executed_taints_nothing(attack_scenario, tmp_path):
+    # A read the monitor refused is a read the agent never saw, so it cannot have
+    # influenced anything. Tainting it anyway would punish the agent for a call that was
+    # stopped — over-tainting, produced by the defense's own verdict.
+    blocks_the_read = replace(
+        attack_scenario,
+        policy=replace(attack_scenario.policy, sensitive_tools=frozenset({"read_document"})),
+    )
+    log = EventLog(tmp_path / "events.jsonl")
+    run(blocks_the_read, DenySensitive(), log=log)
+
+    assert all("doc:INV-91" not in ids for ids in source_ids(log))
+    assert source_ids(log)[-1] == ["user:request", "secret:portal_token"]
