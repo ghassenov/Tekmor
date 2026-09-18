@@ -1,2 +1,150 @@
 # Tekmor
-Designing a Measurable Safety Layer for Tool-Using LLM Agents
+
+**Designing a Measurable Safety Layer for Tool-Using LLM Agents**
+
+*Tekmor* (τέκμωρ): "sign, token, proof." The project's core principle is that untrusted
+content is **evidence, not authority**, and that every safety decision must be provable
+from its trace.
+
+> **Status: foundation.** This repository currently contains the technical research
+> report, the repository scaffolding, and the engineering standards. The defense,
+> simulator, evaluation harness, and observability layer are **not implemented yet**, and
+> no experiments have been run. Nothing here reports results.
+
+## What this is
+
+Tekmor is designed as an **action-centric reference monitor** for tool-using LLM agents,
+not a prompt-injection classifier. Every candidate tool call passes through a decision
+point that returns **ALLOW / BLOCK / ESCALATE / REWRITE** based on provenance, trust,
+action risk, and policy.
+
+The reasoning behind that choice, with citations, is in
+[`docs/technical-doc.md`](docs/technical-doc.md): text-only detection defenses are
+bypassed by adaptive attackers, while system-level designs that constrain *what actions
+untrusted data can trigger* bound the blast radius regardless of whether the model was
+fooled.
+
+## High-level architecture (planned)
+
+```
+observation ─▶ [trust tagger] ─▶ [taint store: memory + tool-output fields]
+                                          │
+                     candidate action ────┤
+                                          ▼
+                    [policy engine: Trusted-Action + Permitted-Flow + least privilege]
+                                          │  risk score + reason codes
+                                          ▼
+              ALLOW ── REWRITE (capability downgrade) ── ESCALATE ── BLOCK
+                                          │
+                                          ├─▶ tool gateway ─▶ world state
+                                          ▼
+                          append-only JSONL event + provenance graph edge
+```
+
+Six trust levels form a lattice used as integrity labels:
+
+```
+SYSTEM_POLICY > AUTHENTICATED_USER > TRUSTED_INTERNAL >
+UNTRUSTED_INTERNAL > UNTRUSTED_EXTERNAL > ADVERSARY_CONTROLLED
+```
+
+The design direction is **Proposal A** (deterministic information-flow reference monitor)
+as the core, with a task-alignment auditor (Proposal B) and an activation-delta drift
+probe (Proposal C) as research extensions gated on the core being stable. See
+`docs/technical-doc.md` for all three and their tradeoffs.
+
+## Repository structure
+
+```
+src/tekmor/       implementation
+  defense/        Defense interface, signals, risk scoring, decision + rewrite
+  provenance/     trust lattice, taint propagation
+  policy/         declarative policies and the policy engine
+  observability/  event schema, append-only JSONL log, trace + provenance graph
+  simulator/      synthetic world, typed tools, canary secrets, scenario format
+  runtime/        ModelAdapter (mock + Qwen3-8B), runner, tool gateway
+tests/            unit / integration / security / evaluation / fixtures
+evaluation/       benchmarks, scenarios, metrics, experiments, results
+research/         literature, hypotheses, research experiments, notes
+docs/             project documentation; technical-doc.md is authoritative,
+                  decisions.md is the append-only decision log
+.github/          PR template, issue templates, CI
+```
+
+Each of these directories has a `CLAUDE.md` with rules scoped to it; the root
+[`CLAUDE.md`](CLAUDE.md) holds the project-wide engineering standards.
+
+## Setup
+
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+
+```bash
+git clone git@github.com:ghassenov/Tekmor.git
+cd Tekmor
+uv sync --dev
+cp .env.example .env    # then fill in; .env is gitignored
+```
+
+The package has no runtime dependencies yet. The mock model backend is the default, so
+nothing so far requires a GPU or an API key.
+
+## Development workflow
+
+`main` is protected: pull requests are required, force-pushes and deletions are blocked,
+and CI must pass. Never commit directly to `main`.
+
+```bash
+git checkout -b feat/<short-description>
+# work, then:
+uv run ruff format . && uv run ruff check . && uv run pytest
+git commit          # Conventional Commits: feat(defense): ...
+git push -u origin feat/<short-description>
+gh pr create        # uses .github/pull_request_template.md
+```
+
+Branch prefixes: `feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `research/`, `chore/`,
+`perf/`, `security/`.
+
+## Testing
+
+```bash
+uv run pytest                  # everything except tests needing a real model
+uv run pytest tests/security   # adversarial tests
+uv run pytest -m slow          # tests needing a real model backend or a GPU
+```
+
+Test categories and their rules are in [`tests/CLAUDE.md`](tests/CLAUDE.md). Security
+tests must include both attacks and benign hard negatives — a defense that blocks
+everything is a failure, so false-block rate is a headline metric.
+
+## Evaluation
+
+Not built yet. The planned metrics (defined in `docs/technical-doc.md` Part VI) are
+benign task utility (BTU), attack success rate (ASR), canary violation rate (CVR),
+false-block rate (FBR), and unnecessary escalation rate (UER), alongside calibration
+(ECE) and time-to-detection. Planned evidence is Tekmor's own scenarios with paraphrase,
+encoding, and adaptive-attacker variants, plus [AgentDojo](https://agentdojo.spylab.ai)
+as external validation.
+
+Evaluation rules — reproducibility, versioned scenarios, baselines, raw/processed
+separation, and no hand-edited results — are in
+[`evaluation/CLAUDE.md`](evaluation/CLAUDE.md).
+
+## Research workflow
+
+Literature notes, hypotheses, and exploratory experiments live in `research/`, under the
+rules in [`research/CLAUDE.md`](research/CLAUDE.md): explicit falsifiable hypotheses, real
+citations, recorded negative results, and a clear separation between observation and
+interpretation. Results are never fabricated, and claims are labelled **implemented /
+tested / observed / hypothesized / planned / inferred**.
+
+## Contributing
+
+Open an issue using one of the templates in `.github/ISSUE_TEMPLATE/` (bug, feature,
+research, security), then work on a branch and open a PR. The PR template asks for
+security, research, and observability implications along with known limitations — filling
+those in honestly is part of the contribution.
+
+## License
+
+[MIT](LICENSE).
