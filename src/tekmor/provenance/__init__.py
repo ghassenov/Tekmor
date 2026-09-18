@@ -1,6 +1,8 @@
-"""Tekmor provenance component: the trust lattice.
+"""Tekmor provenance component: the trust lattice and the labelled source.
 
-Taint propagation through memory and tool-output fields is Phase 2; see src/CLAUDE.md.
+Taint propagation through memory and tool-output fields is the remaining Phase 2 piece;
+until it lands, sources are declared by whatever produced the observation. See
+src/CLAUDE.md.
 """
 
 from tekmor.provenance.trust import Source, TrustLevel, least_trusted

@@ -10,7 +10,7 @@ the *minimum* integrity of those inputs. The enum is ordered so that the usual
 comparison operators are the lattice order and `min()` is the meet.
 
 Taint propagation through memory and tool-output fields is Phase 2; this module is only
-the lattice itself.
+the lattice itself and the labelled source it applies to.
 """
 
 from collections.abc import Iterable
@@ -47,6 +47,14 @@ class Source:
     id, the user). It is kept because provenance must never be silently reduced to a
     bare trust level.
 
+    `confidential` is the second label, kept separate from integrity on purpose:
+    integrity says who may *drive* an action, confidentiality says what may *leave*. A
+    secret read by the authenticated user has high integrity and is still confidential,
+    and collapsing the two would lose one of the two rules the policy engine enforces.
+    It defaults to False, which is the safe default for this label — marking everything
+    confidential would block every outbound call, and the label is only ever set by
+    whatever produced the observation.
+
     It lives here rather than beside the decision contract so that anything producing
     observations — the simulator, the runtime — can label them without importing the
     defense.
@@ -55,3 +63,4 @@ class Source:
     id: str
     trust: TrustLevel
     origin: str = ""
+    confidential: bool = False

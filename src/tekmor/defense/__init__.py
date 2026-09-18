@@ -1,7 +1,8 @@
-"""Tekmor defense component: the decision contract, mediation, and baselines.
+"""Tekmor defense component: the decision contract, the monitor, and the baselines.
 
-The policy engine, signal extractors, risk scoring, and the capability rewriter are
-Phase 2; see src/CLAUDE.md.
+`ReferenceMonitor` is the deterministic core of Proposal A: least privilege,
+Permitted-Flow, then Trusted-Action with a capability downgrade. Signal extraction and
+calibrated risk scoring are still Phase 3; see src/CLAUDE.md.
 """
 
 from tekmor.defense.core import (
@@ -14,6 +15,7 @@ from tekmor.defense.core import (
     Verdict,
     mediate,
 )
+from tekmor.defense.monitor import ReferenceMonitor
 
 __all__ = [
     "Action",
@@ -21,6 +23,7 @@ __all__ = [
     "AgentState",
     "Decision",
     "Defense",
+    "ReferenceMonitor",
     "Source",
     "Verdict",
     "mediate",
