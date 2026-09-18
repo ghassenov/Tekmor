@@ -48,6 +48,16 @@ class ActionProvenance:
     sources: tuple[Source, ...] = ()
 
     @property
+    def confidential(self) -> bool:
+        """Whether anything confidential influenced the action.
+
+        Confidentiality joins the other way from integrity: one confidential influence
+        makes the action confidential, where one untrusted influence makes it untrusted.
+        Both are the pessimistic direction of their own lattice.
+        """
+        return any(s.confidential for s in self.sources)
+
+    @property
     def integrity(self) -> TrustLevel:
         """Biba integrity of the action: the minimum integrity of its influences."""
         return least_trusted(s.trust for s in self.sources)
