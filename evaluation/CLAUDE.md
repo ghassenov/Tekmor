@@ -4,17 +4,29 @@ Scope: benchmarks, scenarios, metrics, experiments, and their outputs. Root rule
 
 ## Status
 
-Planned. Nothing here has been run; no results exist yet.
+The harness runs. `uv run python -m evaluation.harness` runs every scenario in
+`scenarios/` under every defense and writes a timestamped directory under `results/`:
+raw decision events, per-run records, and a manifest, plus the aggregate under
+`processed/`. BTU, ASR, CVR, FBR and UER are implemented; precision/recall, AUROC/AUPRC
+and ECE are not, because they need a calibrated risk score the monitor does not yet emit.
 
-## Intended layout
+Seven scenarios across three domains is a matrix, not a benchmark. External validation
+(AgentDojo), robustness variants and the adaptive attacker are Phase 4.
+
+## Layout
 
 ```
-benchmarks/   external harness integration (AgentDojo first)
-scenarios/    versioned scenario definitions (JSON; see docs/decisions.md)
-metrics/      metric implementations: BTU, ASR, CVR, FBR, UER, calibration
-experiments/  experiment configurations and runners
-results/      generated outputs, separated into raw/ and processed/
+scenarios/    versioned scenario definitions, JSON or YAML (see docs/decisions.md)
+harness.py    run the matrix: scenarios x defenses -> raw records + manifest
+metrics.py    BTU, ASR, CVR, FBR, UER, computed from run records
+results/      generated outputs, separated into raw/ and processed/ (gitignored)
+benchmarks/   external harness integration (AgentDojo first) — not started
 ```
+
+`harness.py` and `metrics.py` are single modules rather than the `metrics/` and
+`experiments/` packages first sketched: one module each is what they are, and the root
+rule against abstraction with one implementation applies here too. Split them when they
+outgrow a file.
 
 Evaluation depends on `src/`; `src/` never depends on evaluation. Keeping the harness
 independent is what stops the defense from being tuned against its own scorer.

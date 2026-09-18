@@ -2,7 +2,7 @@
 
 `docs/technical-doc.md` Part I names three domains: enterprise productivity, a financial
 sandbox with a prepare → confirm → execute payment lifecycle, and a security operations
-centre. All three exist here, each with a scenario in `tests/fixtures/scenarios/`.
+centre. All three exist here, each with a scenario in `evaluation/scenarios/`.
 
 Each domain has the same shape the provenance gate is about — read untrusted content,
 read a secret, take a consequential action, and a lower-capability variant of that
