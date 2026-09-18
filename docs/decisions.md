@@ -179,3 +179,72 @@ which call was decided on.
 **Reopens if.** The simulator's canary registry lands and the trace genuinely needs
 values for debugging — at which point values go through redaction against the registry,
 and the reason codes stay value-free regardless (they are public, per Part VIII).
+
+---
+
+## 2026-09-18 — Scenarios are JSON, not YAML
+
+**Decided.** The scenario format is JSON, parsed with `json` from the standard library
+and validated in `simulator/scenario.py`. This deviates from `technical-doc.md` Part I
+and the `evaluation/` layout, which both say YAML.
+
+**Why.** A scenario is lists, strings, and one nested object. YAML would buy comments
+and less punctuation at the price of the project's first runtime dependency, which the
+dependency-discipline checklist says convenience alone does not justify.
+
+**Rejected.** PyYAML (a dependency for syntax sugar) and a hand-written parser (worse
+than both).
+
+**Reopens if.** Scenario authoring by hand becomes common enough that comments and
+anchors matter — a YAML front end that produces the same `Scenario` is then additive,
+and old JSON scenarios stay loadable so existing results stay interpretable.
+
+---
+
+## 2026-09-18 — One domain now, not three
+
+**Decided.** The simulator ships the enterprise-productivity domain only. The financial
+sandbox (prepare → confirm → execute) and the SOC domain named in `technical-doc.md`
+Part I are written when scenarios need them.
+
+**Why.** The enterprise tools already give the shape the provenance gate is about:
+read untrusted content, read a secret, act outbound, and a lower-capability variant to
+be rewritten to. Two more domains with no scenarios and no evaluation would be code
+written against a guess about what those scenarios need.
+
+**Reopens if.** The scenario matrix lands — the lifecycle domain in particular tests
+something the enterprise one cannot (a multi-step action whose confirmation step is the
+attack target).
+
+---
+
+## 2026-09-18 — Scripted steps declare their influencing sources
+
+**Decided.** A scenario step names the sources that influenced it, and `ScriptedModel`
+hands them to the monitor as the action's provenance. Taint propagation (Phase 2)
+replaces the author's declaration with a computed one; the field does not change.
+
+**Why.** It separates two things that would otherwise land in the same commit: whether
+the decision core does the right thing given provenance, and whether provenance is
+computed correctly. The first is testable now, and the scenarios are the specification
+the propagation will later have to reproduce.
+
+**Cost, recorded so it is not forgotten.** Until propagation exists, the labels are the
+scenario author's opinion. A test that passes here is evidence about the decision core
+only — never about the pipeline that feeds it.
+
+---
+
+## 2026-09-18 — ESCALATE denies unless a run supplies an approver
+
+**Decided.** `runtime.runner.run` takes an `Approver` defaulting to `deny`. An ESCALATE
+verdict executes nothing unless the caller passes something that approves.
+
+**Why.** ESCALATE means the monitor could not decide alone. With no human present, the
+undecided action must not proceed — the same fail-safe rule that makes an internal
+error a BLOCK. A default that approved would make every unreviewed run report the
+utility of an approved one.
+
+**Rejected.** Auto-approving in tests (measures a system nobody would deploy) and
+treating ESCALATE as BLOCK outright (loses the distinction the verdict exists to make,
+and the trace would stop recording which actions needed a human).
