@@ -1,6 +1,7 @@
 """Tekmor observability component: the event schema and the append-only JSONL log.
 
-The timeline and provenance-graph viewers are Phase 3; see src/CLAUDE.md.
+The security timeline and provenance graph are rendered from that log by `viewer.py`,
+which reads the JSONL and nothing else — anything it can show is in the trace.
 """
 
 from tekmor.observability.events import (
@@ -11,6 +12,7 @@ from tekmor.observability.events import (
     decision_event,
     read,
 )
+from tekmor.observability.viewer import render
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -19,4 +21,5 @@ __all__ = [
     "Outcome",
     "decision_event",
     "read",
+    "render",
 ]

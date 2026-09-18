@@ -98,8 +98,12 @@ def test_a_run_records_how_it_was_produced(tmp_path):
 
     runs = [json.loads(line) for line in (raw / "runs.jsonl").read_text().splitlines()]
     assert len(runs) == len(manifest["scenarios"]) * len(manifest["defenses"])
-    metrics = json.loads((next((tmp_path / "processed").iterdir()) / "metrics.json").read_text())
+    processed = next((tmp_path / "processed").iterdir())
+    metrics = json.loads((processed / "metrics.json").read_text())
     assert set(metrics) == set(manifest["defenses"])
+    # The trace as a page, rendered from the log and nothing else.
+    page = (raw / "timeline.html").read_text()
+    assert page.startswith("<!doctype html>") and "CANARY-PORTAL-9d2f" not in page
 
     # Every decision is on the trace, and no argument value ever is.
     events = [json.loads(line) for line in (raw / "decisions.jsonl").read_text().splitlines()]

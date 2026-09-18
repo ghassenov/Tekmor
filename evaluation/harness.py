@@ -43,7 +43,7 @@ from evaluation.metrics import RunRecord, by_defense, calibration, record, table
 from tekmor import __version__
 from tekmor.defense import CanaryScanner, Defense, ReferenceMonitor
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
-from tekmor.observability import EventLog
+from tekmor.observability import EventLog, read, render
 from tekmor.runtime import run
 from tekmor.simulator import load_scenario
 from tekmor.simulator.scenario import Scenario
@@ -178,11 +178,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         + "\n",
         encoding="utf-8",
     )
+    # The trace as a page, beside the trace it was rendered from. It reads the JSONL and
+    # nothing else, so it is a view of the run rather than a second source of truth.
+    view = raw / "timeline.html"
+    view.write_text(render(read(log.path), title=f"Tekmor {stamp}"), encoding="utf-8")
 
     print(table(metrics))
     print()
     print(calibration(metrics))
     print(f"\n{len(records)} runs -> {raw}\n            -> {processed / 'metrics.json'}")
+    print(f"            -> {view}")
     return 0
 
 
