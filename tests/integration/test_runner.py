@@ -91,7 +91,10 @@ def test_run_id_is_deterministic_for_a_scenario_and_defense(benign_scenario):
 
 
 def source_ids(log):
-    return [json.loads(line)["source_ids"] for line in log.path.read_text().splitlines()]
+    return [
+        [source["id"] for source in json.loads(line)["sources"]]
+        for line in log.path.read_text().splitlines()
+    ]
 
 
 def test_provenance_is_computed_from_what_the_agent_read(attack_scenario, tmp_path):

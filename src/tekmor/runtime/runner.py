@@ -21,12 +21,19 @@ from dataclasses import dataclass
 
 from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Defense
 from tekmor.defense.core import mediate
-from tekmor.observability import EventLog, decision_event
+from tekmor.observability import EventLog, Outcome, decision_event
 from tekmor.provenance.taint import TaintTracker
-from tekmor.runtime.gateway import Approver, ToolGateway, deny
+from tekmor.runtime.gateway import Approver, Execution, ToolGateway, deny
 from tekmor.runtime.model import ModelAdapter, ScriptedModel
 from tekmor.simulator.scenario import Scenario
 from tekmor.simulator.world import World
+
+
+def outcome(execution: Execution) -> Outcome:
+    """The three-word summary of an execution the trace records (`observability.events`)."""
+    if execution.executed is None:
+        return "not_executed"
+    return "failed" if execution.error else "executed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +91,14 @@ def run(
 
         provenance = ActionProvenance.of(taint.sources)
         decision = mediate(defense, state, action, provenance, scenario.policy)
+
+        run_step = gateway.execute(action, decision)
         if log is not None:
+            # Written after the gateway, so one event covers the whole step: decision
+            # *and* what became of it. The cost is that a crash between the two loses
+            # the line rather than recording a decision nothing acted on — acceptable
+            # because the gateway turns a failing tool into an outcome instead of an
+            # exception, and a missing step index is visible in a way a wrong one is not.
             log.append(
                 decision_event(
                     run_id,
@@ -94,10 +108,9 @@ def run(
                     provenance,
                     scenario.policy,
                     decision,
+                    outcome(run_step),
                 )
             )
-
-        run_step = gateway.execute(action, decision)
         if run_step.source is not None:
             taint.observe(run_step.source)
         outcomes.append(
