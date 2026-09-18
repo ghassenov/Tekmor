@@ -10,7 +10,7 @@ Planned. Nothing here has been run; no results exist yet.
 
 ```
 benchmarks/   external harness integration (AgentDojo first)
-scenarios/    versioned scenario definitions (YAML)
+scenarios/    versioned scenario definitions (JSON; see docs/decisions.md)
 metrics/      metric implementations: BTU, ASR, CVR, FBR, UER, calibration
 experiments/  experiment configurations and runners
 results/      generated outputs, separated into raw/ and processed/
