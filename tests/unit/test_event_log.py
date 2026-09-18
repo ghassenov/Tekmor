@@ -4,6 +4,7 @@ import json
 
 from tekmor.defense import Action, ActionProvenance, Decision, Source, Verdict
 from tekmor.observability import EventLog, decision_event
+from tekmor.policy import Policy
 from tekmor.provenance import TrustLevel
 
 SECRET = "hunter2-canary"
@@ -12,12 +13,14 @@ PROVENANCE = ActionProvenance.of(
     [
         Source("req-1", TrustLevel.AUTHENTICATED_USER, origin="user"),
         Source("doc-7", TrustLevel.ADVERSARY_CONTROLLED, origin="read_attachment"),
+        Source("sec-2", TrustLevel.TRUSTED_INTERNAL, origin="read_secret", confidential=True),
     ]
 )
+POLICY = Policy("enterprise", version=4)
 
 
 def _event(decision):
-    return decision_event("run-1", 3, "keyword", ACTION, PROVENANCE, decision)
+    return decision_event("run-1", 3, "keyword", ACTION, PROVENANCE, POLICY, decision)
 
 
 def test_event_records_the_decision_and_its_provenance():
@@ -27,11 +30,15 @@ def test_event_records_the_decision_and_its_provenance():
     assert recorded["defense"] == "keyword"
     assert recorded["tool"] == "send_email"
     assert recorded["arg_names"] == ["to", "body"]
-    assert recorded["source_ids"] == ["req-1", "doc-7"]
+    assert recorded["source_ids"] == ["req-1", "doc-7", "sec-2"]
     assert recorded["integrity"] == "ADVERSARY_CONTROLLED"
+    assert recorded["confidential"] is True
     assert recorded["verdict"] == "block"
     assert recorded["reason_codes"] == ["KEYWORD_MATCH"]
     assert recorded["rewritten_tool"] is None
+    # Without the policy and its version a trace cannot be replayed: the rules the
+    # decision was computed under may have moved since it was written.
+    assert (recorded["policy"], recorded["policy_version"]) == ("enterprise", 4)
 
 
 def test_argument_values_never_reach_the_log():
