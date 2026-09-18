@@ -101,6 +101,11 @@ def test_a_run_records_how_it_was_produced(tmp_path):
     processed = next((tmp_path / "processed").iterdir())
     metrics = json.loads((processed / "metrics.json").read_text())
     assert set(metrics) == set(manifest["defenses"])
+    # The calibrated numbers are derived from the same events by a fit that can change,
+    # so they land in processed/ beside the aggregate and never in write-once raw.
+    calibration = json.loads((processed / "calibration.json").read_text())
+    assert set(calibration) == set(manifest["defenses"])
+    assert all(row["sound"] for row in calibration.values())
     # The trace as a page, rendered from the log and nothing else.
     page = (raw / "timeline.html").read_text()
     assert page.startswith("<!doctype html>") and "CANARY-PORTAL-9d2f" not in page
