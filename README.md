@@ -6,10 +6,13 @@
 content is **evidence, not authority**, and that every safety decision must be provable
 from its trace.
 
-> **Status: foundation.** This repository currently contains the technical research
-> report, the repository scaffolding, and the engineering standards. The defense,
-> simulator, evaluation harness, and observability layer are **not implemented yet**, and
-> no experiments have been run. Nothing here reports results.
+> **Status: foundation.** This repository contains the technical research report, the
+> engineering standards, and the first slice of the implementation: the decision
+> contract every defense implements, a fail-closed mediation point, the trust lattice,
+> the three baselines (allow-all, deny-sensitive, keyword), and the append-only JSONL
+> event log. The policy engine, taint propagation, capability rewriter, simulator,
+> runtime, and evaluation harness are **not implemented yet**, no experiments have been
+> run, and nothing here reports results.
 
 ## What this is
 
