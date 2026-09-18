@@ -10,8 +10,15 @@ authors = [{ name = "Ghassen Naouar" }]
 # before adding one.
 dependencies = []
 
+# Optional extras, each needed by exactly one component and imported inside it, so a
+# checkout that does not use that component installs nothing. See "Dependency
+# Discipline" in CLAUDE.md and the entries in docs/decisions.md.
+[project.optional-dependencies]
+# YAML scenario files (simulator/scenario.py). JSON scenarios need nothing.
+yaml = ["pyyaml>=6"]
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+# pyyaml is here as well as in the extras so CI exercises the YAML front end.
+dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
 
 [build-system]
 requires = ["hatchling"]
