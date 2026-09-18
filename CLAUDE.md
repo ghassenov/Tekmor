@@ -54,8 +54,8 @@ src/tekmor/       implementation (see src/CLAUDE.md)
   observability/  event schema, append-only JSONL log, trace/provenance graph
   simulator/      synthetic world, typed tools, canary secrets, scenario format
   runtime/        ModelAdapter (mock + Qwen3-8B), runner, tool gateway
-tests/            unit / integration / security / evaluation / fixtures
-evaluation/       benchmarks, scenarios, metrics, experiments, results
+tests/            unit / integration / security / evaluation
+evaluation/       scenarios (the matrix), harness, metrics, results
 research/         literature, hypotheses, research experiments, notes
 docs/             project documentation; technical-doc.md is authoritative
 .github/          PR template, issue templates, CI
@@ -189,8 +189,9 @@ produced. See `evaluation/CLAUDE.md`.
 
 ## Testing
 
-`tests/unit`, `tests/integration`, `tests/security`, `tests/evaluation`,
-`tests/fixtures`. Security tests must include both attacks **and** benign hard negatives.
+`tests/unit`, `tests/integration`, `tests/security`, `tests/evaluation`. Scenario files
+are the evaluated matrix in `evaluation/scenarios/`, shared with the harness rather than
+copied. Security tests must include both attacks **and** benign hard negatives.
 See `tests/CLAUDE.md`.
 
 ## Dependency Discipline

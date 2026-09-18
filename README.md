@@ -7,14 +7,16 @@ content is **evidence, not authority**, and that every safety decision must be p
 from its trace.
 
 > **Status: foundation.** This repository contains the technical research report, the
-> engineering standards, and the first slice of the implementation: the decision
-> contract every defense implements, a fail-closed mediation point, the trust lattice
-> and taint propagation, the policy engine and the reference monitor with its capability
-> downgrade, the three baselines (allow-all, deny-sensitive, keyword), the append-only
-> JSONL event log, the three-domain simulator with its scenario format, and the runtime
-> (scripted and Qwen3-8B adapters, run loop, tool gateway). The encoding-aware canary
-> scanner, calibrated risk scoring, and the evaluation harness are **not implemented
-> yet**, no experiments have been run, and nothing here reports results.
+> engineering standards, and the implementation so far: the decision contract every
+> defense implements, a fail-closed mediation point, the trust lattice and taint
+> propagation, the policy engine and the reference monitor with its capability
+> downgrade, the encoding-aware canary scanner, the three baselines (allow-all,
+> deny-sensitive, keyword), the append-only JSONL event log, the three-domain simulator
+> with its scenario format, the runtime (scripted and Qwen3-8B adapters, run loop, tool
+> gateway), and the evaluation harness that scores all of it. Calibrated risk scoring
+> and its calibration metrics are **not implemented yet**; the numbers below come from
+> this repository's own seven-scenario matrix, which is not a benchmark, and no external
+> benchmark, robustness variant or adaptive attacker has been run.
 
 ## What this is
 
@@ -68,8 +70,8 @@ src/tekmor/       implementation
   observability/  event schema, append-only JSONL log, trace + provenance graph
   simulator/      synthetic world, typed tools, canary secrets, scenario format
   runtime/        ModelAdapter (mock + Qwen3-8B), runner, tool gateway
-tests/            unit / integration / security / evaluation / fixtures
-evaluation/       benchmarks, scenarios, metrics, experiments, results
+tests/            unit / integration / security / evaluation
+evaluation/       scenarios (the matrix), harness, metrics, generated results
 research/         literature, hypotheses, research experiments, notes
 docs/             project documentation; technical-doc.md is authoritative,
                   decisions.md is the append-only decision log
@@ -100,6 +102,36 @@ uv sync --extra qwen    # Transformers + torch, for the Qwen3-8B adapter
 
 The scripted model backend is the default, so nothing so far requires a GPU or an API
 key.
+
+## Evaluation
+
+```bash
+uv run python -m evaluation.harness
+```
+
+Every scenario in `evaluation/scenarios/` runs under every defense; the run writes raw
+decision events, per-run records and a manifest (commit, environment, input hashes) to
+`evaluation/results/raw/<timestamp>/`, and the aggregate to `results/processed/`. Runs
+are deterministic: the scripted adapter replays the scenario's steps and the simulated
+human denies every escalation.
+
+Measured on the seven-scenario matrix in this repository (three domains, benign and
+attack halves), scripted adapter, reproduced by the command above:
+
+| defense | BTU | ASR | CVR | FBR | UER |
+|---|---|---|---|---|---|
+| allow-all | 1.00 | 1.00 | 0.43 | 0.00 | n/a |
+| deny-sensitive | 0.00 | 0.00 | 0.00 | 0.50 | n/a |
+| keyword | 1.00 | 0.75 | 0.14 | 0.00 | n/a |
+| tekmor | 1.00 | 0.25 | 0.14 | 0.00 | 0.00 |
+| tekmor+canary | 1.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+
+Read it as a sanity check on the mechanism, not as a result about prompt injection in
+general: seven scenarios, scripted agents, and attacks written by the same person who
+wrote the defense. The one attack `tekmor` misses is the mislabelled-secret scenario —
+the argument-level residual a provenance rule cannot see — and the row below it is what
+closes it. `deny-sensitive` is the reminder that ASR alone justifies nothing: it stops
+every attack by stopping half the benign actions too.
 
 ## Development workflow
 

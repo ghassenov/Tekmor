@@ -21,9 +21,17 @@ in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the Qwen3-8B ad
 the run loop and the `ToolGateway` in `runtime/`.
 
 **Not implemented:** signal extraction, calibrated risk scoring, and argument redaction
-as a rewrite. Nothing here has been evaluated: the runs in `tests/` exercise the loop and
-the rules, they do not measure a defense — there is no harness, no metric, and no
-result.
+as a rewrite. Without a risk score there is no calibration, so precision/recall, AUROC and
+ECE are still undefined here.
+
+**Evaluated, on this repository's own matrix.** `evaluation/harness.py` runs every
+scenario under every defense and scores BTU, ASR, CVR, FBR and UER from world state;
+`docs/decisions.md` records the first measurement and its limits. Seven scenarios in
+three domains is a matrix, not a benchmark, and the external validation (AgentDojo),
+the robustness variants and the adaptive attacker are still ahead.
+
+A scenario states its own ground truth (`success` / `attack_success`: conditions over
+world state) and that, like `id` and `benign`, never reaches a defense.
 
 **What taint propagation does and does not close.** The sources the monitor decides from
 are now computed from what the agent actually read: the world labels stored content, a
