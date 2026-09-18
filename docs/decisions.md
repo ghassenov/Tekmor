@@ -368,3 +368,63 @@ readable — still holds, and is preserved: the class has exactly one `world.inv
 Giving the gateway the defense as well, so it would both decide and execute (the
 decision must stay separable from execution, which is what makes `mediate()` testable
 alone).
+
+---
+
+## 2026-09-18 — The policy engine is two predicates, and the monitor maps them to verdicts
+
+**Decided.** `policy/core.py` holds the rules as pure predicates over primitives —
+`permitted_tool` (least privilege), `trusted_action` (integrity threshold) and
+`permitted_flow` (confidential data out) — plus `downgrade_for`, which vets a declared
+rewrite target. `defense/monitor.py` holds `ReferenceMonitor`, which evaluates them in a
+fixed order and chooses the verdict: unpermitted tool → BLOCK, flow violation → BLOCK,
+Trusted-Action violation → REWRITE when the policy declares a safe downgrade and
+ESCALATE when it does not, otherwise ALLOW.
+
+**Why the rules take primitives, not `Action`/`ActionProvenance`.** `defense` imports
+`policy`; the reverse would be a cycle. More usefully, a predicate over `(tool,
+TrustLevel, Policy)` is total and property-testable on its own, which is what
+`policy/CLAUDE.md` asks of the evaluation path, and a rule that needs no defense to test
+is a rule that can be replayed against a recorded trace later.
+
+**Why a flow violation blocks rather than downgrading.** A downgrade lowers the
+*capability* of a call, not what the call carries. `draft_email` with the secret still in
+its body has moved the value, not stopped it, and ESCALATE would hand a human a decision
+they cannot check because the value need not be in the argument in a form they would
+recognise. So Permitted-Flow is checked first and its answer is final.
+
+**Confidentiality is a provenance label, not a string match.** `Source.confidential` is
+set by whatever produced the observation, and `ActionProvenance.confidential` is its
+join. The monitor never looks at argument text, which is exactly why the base64 variant
+that defeats `KeywordFilter` changes nothing for it (`tests/security/`). The cost,
+recorded: a value that reaches an argument without passing through a labelled source is
+invisible to this rule. That is the argument-level residual, and the encoding-aware
+canary scanner is a separate, later mechanism — not a replacement for the label.
+
+**Least privilege is enforced, with no permissive default.** `Policy.allowed_tools` is
+empty by default and an empty policy permits nothing, so a policy that forgets a tool
+fails closed rather than open. The fixtures list their tools; the loader rejects a policy
+that names a tool the domain does not have, because a typo in `allowed_tools` silently
+blocks work and a typo in `sensitive_tools` silently un-guards a tool.
+
+**`outbound_tools` is derived, not restated.** Where a tool sends data is intrinsic to
+the tool and lives on `Tool.outbound`, but the defense is handed only a policy. The
+scenario loader defaults the policy's set from the domain's tool specs, so the two cannot
+drift; a scenario may still state it explicitly.
+
+**Rejected.** Matching canary values in the arguments as the flow rule (that is the
+keyword baseline, and the baseline exists to be beaten). Letting the monitor see the
+world or the tool specs (it would then depend on the run, and the `Defense` contract is
+four arguments for a reason). A risk score with thresholds (Phase 3: calibration needs
+measurement, and an uncalibrated score would only obscure which predicate fired).
+
+**Not done, so it is not claimed.** The scenario-level hard negative for Permitted-Flow —
+a legitimate confidential send to an authorized recipient — is covered in
+`tests/unit/test_policy_rules.py` and `tests/unit/test_monitor.py` but has no scenario,
+because `World.leaked` records any canary in an outbound call as leaked and an authorized
+flow would read as a leak in the scorer. Fixing that is a change to the scoring surface
+and belongs with the evaluation harness.
+
+**Trace.** `DecisionEvent` now carries the policy name and version and the
+confidentiality of the action's provenance. A decision cannot be replayed without the
+policy it was computed under.
