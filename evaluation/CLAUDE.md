@@ -53,6 +53,12 @@ or its benign task no longer completes. Variants are reported paired with their 
 metrics. Results land under `results/{raw,processed}/<stamp>-variants/`. With the scripted
 adapter, document rewrites reach no decision; the variants probe the argument channel.
 
+**Ablations** (`ablations.py`, `uv run python -m evaluation.ablations`) wrap the unchanged
+monitor and remove one *input* each: provenance, propagation (only the latest observation
+counts), or the capability lattice. Rules-only and full are `tekmor` and `tekmor+canary`.
+Results land under `results/{raw,processed}/<stamp>-ablations/`. The numbers, and why the
+no-rewrite row cannot move on this matrix, are in `docs/decisions.md`.
+
 ## Layout
 
 ```
@@ -61,6 +67,7 @@ harness.py    run the matrix: scenarios x defenses -> raw records + manifest
 metrics.py    BTU, ASR, CVR, FBR, UER, detection and ECE, from run records
 calibration.py  CALIB-RISK: the Platt fit, the held-out protocol, and its own controls
 variants.py   robustness variants: encode / reword / reorder, validated and paired
+ablations.py  the monitor with one input removed: provenance, propagation, rewrite
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 benchmarks/   external harness integration (AgentDojo first) — not started
 ```
