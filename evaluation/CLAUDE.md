@@ -8,16 +8,21 @@ The harness runs. `uv run python -m evaluation.harness` runs every scenario in
 `scenarios/` under every defense and writes a timestamped directory under `results/`:
 raw decision events, per-run records, and a manifest, plus the aggregate under
 `processed/`. BTU, ASR, CVR, FBR, UER and time-to-detection are implemented, and so are
-precision/recall/F1 per action and AUROC/AUPRC/ECE over the risk score. Intervention
-latency and blast radius are not.
+precision/recall/F1 per action and AUROC/AUPRC/ECE over the risk score, plus the
+pass/fail grid by attack family and level (`metrics.grid`). Intervention latency and
+blast radius are not.
 
 `calibration.py` is CALIB-RISK: it Platt-scales the risk score **leave-one-scenario-out**
 and reports ECE, Brier and AUROC raw and calibrated over the same held-out actions. The
 fold is the scenario, never the action — actions inside one run share a world, a policy
-and an injected chain, so an action-level split trains on an action's near-twin. On this
-matrix the calibration is *worse* than the ordinal scale, which is a result and is
-recorded in `docs/decisions.md` rather than tuned away. The harness also writes a
-`timeline.html` beside each `decisions.jsonl` (`tekmor.observability.viewer`).
+and an injected chain, so an action-level split trains on an action's near-twin. On the
+seven-scenario matrix the calibration was *worse* than the ordinal scale; on the full
+twenty-four it improves ECE (0.07 -> 0.04) with no inverted fold, which is the reversal
+the earlier entry said a larger matrix would decide. Only the raw-versus-calibrated
+comparison *within* one matrix is meaningful — the two matrices are different samples —
+and the fit still costs a little ranking, so the scale in use stays ordinal. Both results
+are in `docs/decisions.md`. The harness also writes a `timeline.html` beside each
+`decisions.jsonl` (`tekmor.observability.viewer`).
 
 **Per-action labels are derived, never declared.** `unsafe_steps` replays each prefix of
 an attack scenario under `AllowAll` and labels the step whose execution first makes the
@@ -27,8 +32,17 @@ wish the defense behaved. Read precision with that definition in mind: it marks 
 *goal-reaching* step, so stopping the same injected chain one step earlier scores as a
 false positive.
 
-Seven scenarios across three domains is a matrix, not a benchmark. External validation
-(AgentDojo), robustness variants and the adaptive attacker are Phase 4.
+**The matrix is the grid.** Twenty-four scenarios across three domains cover all seven
+attack families of `docs/technical-doc.md` Part I at levels 1-5, seven of them benign
+(`over_refusal`, the family whose failure mode is refusing legitimate work). A scenario
+states its `family` and `level`; both are scorer metadata and never reach a defense, and
+`parse_scenario` rejects a family outside the taxonomy or one that disagrees with
+`benign`. Level 4 is represented by static rewordings — the adaptive attacker that
+mutates against observed decisions is Phase 4, and nothing here substitutes for it.
+
+Twenty-four scenarios across three domains is still a matrix, not a benchmark: written by
+the same people who wrote the defense, and every attack a scripted path. External
+validation (AgentDojo), robustness variants and the adaptive attacker are Phase 4.
 
 ## Layout
 
