@@ -66,6 +66,14 @@ reviving it".
   AgentDojo slack's URL fetch.
 - **Seeds.** Every sampling step uses `random.Random(0)`.
 
+## Amendment (2026-09-19, before any result was seen)
+
+The first run crashed at the last stage. Slack numbers its injection tasks from 1, so
+set B's "`injection_task_0`" does not exist in every suite. Set B now uses **each suite's
+first injection task by id**. No output of the probe had been printed when this was
+changed. Feature extraction is now cached on disk (`results/*.pkl`), so a failure
+downstream of it does not repeat the forward passes.
+
 ## Assumptions
 
 - WikiText paragraphs stand in for the benign text an agent reads. They are
