@@ -1523,3 +1523,31 @@ only the task text, is the only way past the endorsed-pair ceiling.
 **Not claimed.** Anything about full-precision Qwen3-8B: the NF4 model is the one this
 hardware can run, and a quantized judge is a different judge. Anything about Task Shield
 or AlignmentCheck, which use frontier judges.
+
+## Proposal C on Qwen3-8B: the reference model fails the gate the same way; still demoted
+
+**Context.** The drift-probe verdict above was reached on a Qwen3-0.6B proxy, and one of
+its two revival conditions was the reference model. Amendment 2 in
+`research/experiments/drift_probe/README.md` pre-registered a rerun on Qwen3-8B (NF4, Colab
+T4), changing only the model.
+
+**What it measured** (layer 17, chosen on synthetic validation; the 0.6B values in
+brackets):
+
+```
+set                          AUROC         TPR@0.5       FPR@0.5
+synthetic validation         0.99 [0.99]   0.52 [0.50]   0.00 [0.00]
+Tekmor matrix (held out)     0.83 [0.82]   0.61 [0.83]   0.25 [0.25]
+AgentDojo v1.2.2 (held out)  0.65 [0.58]   0.99 [0.90]   0.91 [0.82]
+```
+
+**Verdict: the gate fails on both held-out sets again, and Proposal C stays demoted.**
+The 8B probe flags 88 of 97 clean AgentDojo runs. On the matrix it drops four attacks the
+proxy caught and keeps both benign false positives. Model size alone does not fix the
+failure. The remaining untested cause is the training register, which is a
+data-collection task (tool outputs and business documents, disjoint from both evaluation
+sets).
+
+**Not claimed.** Full-precision Qwen3-8B, other layers' held-out behaviour (layer choice
+stays on synthetic validation, as pre-registered), or anything about TaskTracker's own
+numbers.
