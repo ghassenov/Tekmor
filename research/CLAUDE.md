@@ -4,8 +4,10 @@ Scope: literature, hypotheses, exploratory experiments, and notes. Root rules ap
 
 ## Status
 
-Planned. `docs/technical-doc.md` currently holds the literature review; move or extend it
-here as notes accumulate rather than duplicating it.
+`experiments/drift_probe/` is the first experiment: Proposal C's activation-delta probe,
+pre-registered, run on a Qwen3-0.6B proxy, and refuted by its own gate (a negative result,
+kept). `docs/technical-doc.md` still holds the literature review; move or extend it here
+as notes accumulate rather than duplicating it.
 
 ## Intended layout
 
