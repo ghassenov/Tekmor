@@ -212,6 +212,7 @@ def _policy(data: Mapping[str, Any], outbound: frozenset[str]) -> Policy:
         authorized_recipients=frozenset(data.get("authorized_recipients", ())),
         recipient_args=frozenset(data.get("recipient_args", ("to",))),
         rewrites=dict(data.get("rewrites", {})),
+        endorse_named=bool(data.get("endorse_named", False)),
         version=_require(data, "version", int) if "version" in data else 1,
     )
 

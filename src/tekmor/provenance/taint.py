@@ -21,9 +21,11 @@ tool results, and attributing an argument to the observation it was copied from.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from typing import Any
 
-from tekmor.provenance.trust import Source, TrustLevel
+from tekmor.provenance.trust import ENDORSED, Source, TrustLevel
 
 #: The task itself. It comes from the person who asked for the work, so it is the one
 #: influence present before the agent has read anything.
@@ -44,3 +46,37 @@ class TaintTracker:
         """Record that the agent has seen `source`. Influence is never removed."""
         if source not in self.sources:
             self.sources = (*self.sources, source)
+
+
+#: The shortest argument value that counts as naming something. Below it a value is a
+#: word the request may contain by accident ("pay", "all") rather than a resource name.
+MIN_NAME = 6
+
+
+def endorse(source: Source, args: Mapping[str, Any], request: str) -> Source:
+    """`source`, endorsed by the user if the call that produced it named what they named.
+
+    The endorsement primitive `docs/technical-doc.md` Recommendation 1 asks for once
+    utility falls: when the user's authenticated request names a resource verbatim ("pay
+    the bill in `bill-december-2023.txt`") and the agent reads exactly that resource, the
+    user has vouched for acting on it, and content that was merely *unvouched for* may
+    drive the action they asked for. It is a provenance link, not a text classifier:
+    what is compared is the read's own argument against the request, never the content.
+
+    It is deliberately narrow. Only `UNTRUSTED_*` content is endorsed — content the
+    organization already knows is hostile stays `ADVERSARY_CONTROLLED` whoever names it,
+    and trusted content needs nothing. Only integrity moves: confidentiality is
+    untouched, so an endorsed read of a secret still may not leave (Permitted-Flow).
+
+    ponytail: "named" is a verbatim match of an argument value of at least `MIN_NAME`
+    characters. An attacker who can create a resource whose name is a phrase in the
+    request borrows the endorsement for it. The upgrade is structured endorsement — the
+    user attaching the resource — which needs an interface this repository does not have.
+    """
+    if not TrustLevel.UNTRUSTED_EXTERNAL <= source.trust < ENDORSED:
+        return source
+    named = any(
+        isinstance(value, str) and len(value) >= MIN_NAME and value in request
+        for value in args.values()
+    )
+    return replace(source, endorsed_by=USER_REQUEST.id) if named else source
