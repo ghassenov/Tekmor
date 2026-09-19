@@ -56,6 +56,8 @@ def _record(scenario, risks, unsafe):
         scenario=scenario,
         scenario_version=1,
         domain="enterprise",
+        family="indirect_injection" if any(unsafe) else "over_refusal",
+        level=1,
         defense="tekmor",
         benign=not any(unsafe),
         completed=True,
