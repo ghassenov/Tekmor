@@ -229,3 +229,6 @@ __marimo__/
 /.cache/
 *.npy
 *.safetensors
+
+# Research experiment outputs (reproduced by rerunning the experiment; numbers go in its README).
+/research/experiments/*/results/
