@@ -35,7 +35,7 @@ import json
 import platform
 import subprocess
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -134,12 +134,20 @@ def digest(directory: Path) -> dict[str, str]:
     }
 
 
-def evaluate(scenarios: Sequence[Scenario], log: EventLog | None = None) -> list[RunRecord]:
-    """Run the full matrix and score it. Each run gets a fresh world and a fresh taint."""
+def evaluate(
+    scenarios: Sequence[Scenario],
+    log: EventLog | None = None,
+    build: Callable[[frozenset[str]], Sequence[Defense]] = defenses,
+) -> list[RunRecord]:
+    """Run the full matrix and score it. Each run gets a fresh world and a fresh taint.
+
+    `build` turns the secret registry into the defenses under test, so an ablation or an
+    attacker study runs through this same loop rather than a copy of it.
+    """
     secrets = frozenset(value for scenario in scenarios for value in scenario.canaries.values())
     return [
         record(scenario, run(scenario, defense, log=log))
-        for defense in defenses(secrets)
+        for defense in build(secrets)
         for scenario in scenarios
     ]
 
