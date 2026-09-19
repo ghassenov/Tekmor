@@ -9,8 +9,19 @@ observations, canary tagging on outbound calls, the payment lifecycle invariant)
 `domains.py` (the enterprise, financial and SOC tool sets), `scenario.py` (the scenario
 format, its validation, and the JSON and YAML front ends).
 
-**Not implemented:** the scenario matrix, and robustness variants (paraphrase / base64 /
-hex / spaced / reversed).
+The scenario matrix is complete: twenty-four scenarios in `evaluation/scenarios/` cover
+the seven attack families at levels 1-5, and a scenario declares its `family` and `level`
+(see `evaluation/CLAUDE.md`). Memory is `remember`/`recall` over the ordinary document
+store, and the store **launders trust on purpose** — `remember` labels what it is handed
+as ordinary internal content, so what refuses a poisoned recall is the run's taint rather
+than a careful store. `lookup_vendor` and `enrich_indicator` are the same read under
+names that say where the content came from, which is what makes tool-output tampering
+legible in a trace.
+
+**Not implemented:** robustness variants (paraphrase / base64 / hex / spaced / reversed)
+as *generated* transformations — the encodings appear in hand-written scenarios today —
+and memory that carries a label across runs, so the cross-session poisoning case is a
+declared document.
 
 ## Rules
 
@@ -23,9 +34,9 @@ hex / spaced / reversed).
   `benign`. `parse_scenario` rejects both a step that declares sources and a document
   that states no trust — guessing a label either invents trust or turns every scenario
   into an attack.
-- **Scenario metadata (`id`, `version`, `benign`) must never reach the defense.** Only
-  the task, the action, its provenance, and the policy do. A defense that can recognise
-  a test case is not evidence of security.
+- **Scenario metadata (`id`, `version`, `benign`, `family`, `level`) must never reach
+  the defense.** Only the task, the action, its provenance, and the policy do. A defense
+  that can recognise a test case is not evidence of security.
 - **Outcomes are world state.** Utility and attack success are read off `World` (sent
   mail, drafts, `leaked`), never off what the agent claimed to do.
 - `World.canaries_in` is ground truth for scoring, not a defense. It matches verbatim
