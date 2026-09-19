@@ -36,6 +36,7 @@ import platform
 import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -156,10 +157,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--scenarios", type=Path, default=SCENARIOS)
     parser.add_argument("--results", type=Path, default=RESULTS)
+    parser.add_argument(
+        "--endorse", action="store_true", help="turn on Policy.endorse_named in every scenario"
+    )
     args = parser.parse_args(argv)
 
     scenarios = load_matrix(args.scenarios)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    if args.endorse:
+        scenarios = tuple(
+            replace(s, policy=replace(s.policy, endorse_named=True)) for s in scenarios
+        )
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ("-endorsed" if args.endorse else "")
     raw = args.results / "raw" / stamp
     processed = args.results / "processed" / stamp
     raw.mkdir(parents=True, exist_ok=True)
@@ -179,6 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 **manifest(scenarios, list(metrics), args.scenarios),
                 "inputs": digest(args.scenarios),
+                "endorse_named": args.endorse,
             },
             indent=2,
             sort_keys=True,
