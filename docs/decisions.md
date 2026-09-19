@@ -1446,3 +1446,80 @@ business documents) and the reference model on a GPU. Neither is available here.
 **Not claimed.** Nothing about Qwen3-8B, and nothing about TaskTracker's reported
 numbers, which were measured on its own data with larger models. This is one proxy
 model, one training recipe and one layer choice.
+
+## Proposal B on a GPU: Qwen3-8B and Phi-3-mini both refuse almost every gray-zone call, and held out that is `deny-gray`
+
+**Context.** Proposal B was left without its held-out number: the one judge that
+separated on the matrix (Phi-3-mini) was too slow on CPU to run on AgentDojo, and the
+reference model (Qwen3-8B) did not fit. Both were run on a Colab T4
+(`notebooks/colab_qwen3_8b.ipynb`) at commit 988763c, clean tree, endorsement on, with
+the frozen prompt and the unfitted 0.5 threshold. Nothing was tuned between runs.
+
+- Qwen3-8B: **NF4 4-bit**, float16 compute, `cuda:0`
+  (`evaluation/results/*/20260919T185646Z-alignment`).
+- Phi-3-mini: float16, unquantized, `cuda:0`, with some parameters offloaded to CPU by
+  `device_map="auto"` (`evaluation/results/*/20260919T190944Z-alignment`).
+
+`evaluation/results/` is gitignored and the VM is ephemeral. The manifests and processed
+metrics were printed into the notebook's saved output and extracted verbatim from there.
+The per-run `runs.jsonl` and `decisions.jsonl` stayed on the VM and are lost.
+
+**Consistency check.** Phi-3-mini's matrix row on GPU fp16 is identical to its earlier
+CPU bf16 row (BTU 0.75, ASR 0.06, 70 escalations, the same three flips). The dtype and
+device change did not move the dev-set result.
+
+**What it measured.**
+
+```
+matrix (dev, 26)          BTU   ASR   escal.  flips  judge < 0.5    s/call
+tekmor (no auditor)       1.00  0.11     6      -        -            -
++ Qwen3-8B NF4            0.75  0.06    70      3     60 / 61       0.37
++ Phi-3-mini fp16         0.75  0.06    70      3     61 / 61       0.24
+
+AgentDojo v1.2.2 (held out), pooled over 4 suites, 97 benign / 583 attack runs
+                          BTU   ASR   UA    judge < 0.5 (all calls)  s/call
+tekmor (endorse)          0.69  0.15  0.66        -                    -
++ Qwen3-8B NF4            0.49  0.00  0.50    852 / 858             0.38
++ Phi-3-mini fp16         0.47  0.00  0.48    840 / 849             0.24
+tekmor (no endorse)*      0.45  0.04    -         -                    -
+
+per suite (BTU / ASR)     banking      slack        travel       workspace
+tekmor (endorse)          0.69/0.00    0.38/0.26    0.70/0.00    0.85/0.27
++ Qwen3-8B NF4            0.44/0.00    0.24/0.00    0.70/0.00    0.55/0.00
++ Phi-3-mini fp16         0.44/0.00    0.24/0.00    0.70/0.00    0.50/0.00
+```
+
+\* From the endorsement entry above, not from these runs.
+
+- **Neither judge discriminates; both say no.** Qwen3-8B's median answer over all 858
+  calls is 6.5e-7, and only 6 are above 0.5. Phi-3-mini's median is 0.03, with 9 above.
+  The matrix flips are the same three scenarios for both. The honest endorsed invoice and
+  the SOC phishing triage are refused along with the tampered invoice, exactly as the
+  "endorsed pair shows the ceiling" point above predicted.
+- **Held out, the auditor takes ASR to zero and pays for it with a fifth of benign
+  utility.** Endorsement had bought BTU 0.45 → 0.69 at ASR 0.04 → 0.15. The auditor
+  returns most of that utility and more than all of those attacks. The net against plain
+  `tekmor` without endorsement (BTU 0.45, ASR 0.04) is slightly better on both axes, but
+  the two rows come from separate runs and no `deny-gray` baseline was run, so how much of
+  that the judge contributes beyond refusing the whole gray zone is **not measured**.
+- **Latency is no longer the blocker.** Uncached calls cost 0.24–0.38 s on a T4, against
+  ~20 s for Phi-3-mini on this project's CPU.
+
+**Verdict. Unchanged: built, not adopted.** The held-out number now exists, and it shows
+a judge that acts as a gray-zone refusal switch. At 0.5, a 99% refusal rate is not
+alignment checking, and it fails Recommendation 1's BTU threshold (~0.7) on the setting
+it was meant to rescue. The mechanism stays as it is.
+
+**Rejected.** Lowering the threshold to the judges' observed distribution. That would be
+fitting on the held-out set, and the medians (6.5e-7, 0.03) show there is no
+distribution to fit: it would have to be placed by hand. Reporting the zero ASR without
+the BTU beside it.
+
+**Open.** A `deny-gray` baseline (refuse every gray-zone ALLOW, no judge) on the same
+AgentDojo configuration. That is the comparison that decides whether any judge here adds
+anything. A judge that sees which account the user named (the endorsement's source), not
+only the task text, is the only way past the endorsed-pair ceiling.
+
+**Not claimed.** Anything about full-precision Qwen3-8B: the NF4 model is the one this
+hardware can run, and a quantized judge is a different judge. Anything about Task Shield
+or AlignmentCheck, which use frontier judges.
