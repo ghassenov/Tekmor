@@ -60,8 +60,13 @@ class ActionProvenance:
 
     @property
     def integrity(self) -> TrustLevel:
-        """Biba integrity of the action: the minimum integrity of its influences."""
-        return least_trusted(s.trust for s in self.sources)
+        """Biba integrity of the action: the minimum integrity of its influences.
+
+        Each influence counts at `Source.integrity`, which is its label, or `ENDORSED`
+        when the user endorsed it (`provenance.taint.endorse`). That is the one place a
+        label is raised, and the source records that it was.
+        """
+        return least_trusted(s.integrity for s in self.sources)
 
     @classmethod
     def of(cls, sources: Iterable[Source]) -> ActionProvenance:

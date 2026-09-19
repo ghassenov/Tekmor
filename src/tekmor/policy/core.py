@@ -53,6 +53,9 @@ class Policy:
     recipient_args: frozenset[str] = frozenset({"to"})
     #: Impact-ordered capability lattice: risky tool -> its lower-capability variant.
     rewrites: Mapping[str, str] = field(default_factory=dict)
+    #: Endorse content the user named verbatim in the request (`provenance.taint.endorse`).
+    #: Off unless a deployment turns it on: it is the one way trust is ever raised.
+    endorse_named: bool = False
     version: int = 1
 
 

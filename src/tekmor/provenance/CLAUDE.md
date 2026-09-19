@@ -10,7 +10,12 @@ run, seeded with the request that asked for the work), `canary.py` (the
 encoding-aware secret matcher: plain, separator-broken, case-shifted, reversed, hex, and
 base64 at each of the three byte alignments).
 
-**Not implemented:** field-level provenance, and the endorsement primitive.
+`taint.endorse` is the endorsement primitive: content the user named verbatim in the
+request, if merely `UNTRUSTED_*`, is raised to `ENDORSED` (`TRUSTED_INTERNAL`) for
+integrity only, when the policy sets `endorse_named`. See `docs/decisions.md`.
+
+**Not implemented:** field-level provenance, and structured endorsement (the user
+attaching a resource instead of naming it).
 
 **The deliberate coarseness, recorded as the rules below require.** Influence is
 call-level and prefix-monotone: an observation the agent has seen taints every action it
@@ -45,8 +50,12 @@ labels (secrets, canaries) are tracked separately from integrity.
   levels across fields; preserve that granularity. Collapsing a result to one label is
   the documented "argument-level residual" gap, so it must be a deliberate, recorded
   choice.
-- **Raising trust requires an explicit endorsement primitive** with its own trace event,
-  never an implicit side effect.
+- **Raising trust requires an explicit endorsement primitive**, never an implicit side
+  effect. `taint.endorse` is the only one. It records who endorsed the content
+  (`Source.endorsed_by`) and never rewrites `trust`, and every decision event the
+  endorsed source influenced carries both (schema 3). Recording it on the source,
+  instead of in a separate event line, is deliberate: the log is keyed by decision, and
+  the endorsement is part of the label each decision was computed from.
 - **Over-tainting is a real failure.** Label creep collapses utility. If a change widens
   taint, check the effect on benign hard negatives.
 - Label operations (join, meet, comparison) belong here and must be pure and total, so
