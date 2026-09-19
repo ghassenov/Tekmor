@@ -32,6 +32,23 @@ def deny(action: Action) -> bool:
     return False
 
 
+def permitted(action: Action, decision: Decision, approver: Approver = deny) -> Action | None:
+    """The action a decision lets execute, or `None`. Anything unrecognised executes nothing.
+
+    A verdict added later therefore fails closed here until it is handled on purpose,
+    which is the same rule as `mediate()` failing closed on an error. A function rather
+    than only a method so a driver with its own tool runtime (the AgentDojo pipeline
+    element) applies the same mapping instead of a copy of it.
+    """
+    if decision.verdict is Verdict.ALLOW:
+        return action
+    if decision.verdict is Verdict.REWRITE:
+        return decision.rewritten
+    if decision.verdict is Verdict.ESCALATE and approver(action):
+        return action
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class Execution:
     """What the gateway did with one decided action.
@@ -55,18 +72,7 @@ class ToolGateway:
     approver: Approver = deny
 
     def permitted(self, action: Action, decision: Decision) -> Action | None:
-        """The action to execute, or `None`. Anything unrecognised executes nothing.
-
-        A verdict added later therefore fails closed here until it is handled on
-        purpose, which is the same rule as `mediate()` failing closed on an error.
-        """
-        if decision.verdict is Verdict.ALLOW:
-            return action
-        if decision.verdict is Verdict.REWRITE:
-            return decision.rewritten
-        if decision.verdict is Verdict.ESCALATE and self.approver(action):
-            return action
-        return None
+        return permitted(action, decision, self.approver)
 
     def execute(self, action: Action, decision: Decision) -> Execution:
         allowed = self.permitted(action, decision)
