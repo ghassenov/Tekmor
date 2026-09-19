@@ -1,7 +1,7 @@
 """DRIFT-PROBE experiment: extract activation deltas, fit a linear probe, evaluate held out.
 
     uv run --extra qwen --extra agentdojo --with pyarrow \
-        python -m research.experiments.drift_probe.probe
+        python -m research.experiments.drift_probe.probe [--model Qwen/Qwen3-8B --quant nf4]
 
 Research code (`research/CLAUDE.md`): reproducible and seeded, not a dependency of
 anything. The hypothesis, the gate and the method are in `README.md` beside this file,
@@ -11,6 +11,7 @@ the cached WikiText parquet. The project does not depend on it.
 
 from __future__ import annotations
 
+import argparse
 import json
 import random
 import re
@@ -20,8 +21,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "results"
-MODEL = "Qwen/Qwen3-0.6B"
+RESULTS = HERE / "results"
 MAX_TOKENS = 4096
 rng = random.Random(0)
 
@@ -97,13 +97,24 @@ def dataset(n: int, tasks: list[str], templates: list[str]) -> list[tuple[str, s
 class Extractor:
     """Last-token hidden states at every layer, and the delta the data block causes."""
 
-    def __init__(self) -> None:
+    def __init__(self, model: str, quant: str | None) -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self.torch = torch
-        self.tok = AutoTokenizer.from_pretrained(MODEL)
-        self.model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32).eval()
+        self.tok = AutoTokenizer.from_pretrained(model)
+        if quant == "nf4":
+            from transformers import BitsAndBytesConfig
+
+            config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,  # T4 has no native bf16
+            )
+            kwargs = {"quantization_config": config}
+        else:
+            kwargs = {"dtype": torch.float32}
+        self.model = AutoModelForCausalLM.from_pretrained(model, device_map="auto", **kwargs).eval()
         self._before: dict[str, np.ndarray] = {}
         self.truncated = 0
 
@@ -114,14 +125,14 @@ class Extractor:
             add_generation_prompt=True,
             enable_thinking=False,
         )
-        ids = self.tok(prompt, return_tensors="pt").input_ids
+        ids = self.tok(prompt, return_tensors="pt").input_ids.to(self.model.device)
         if ids.shape[1] > MAX_TOKENS:
             # Keep the head (the task) and the tail (the generation prompt).
             self.truncated += 1
             ids = self.torch.cat([ids[:, : MAX_TOKENS // 2], ids[:, -MAX_TOKENS // 2 :]], 1)
         with self.torch.no_grad():
             hidden = self.model(ids, output_hidden_states=True).hidden_states
-        return np.stack([h[0, -1].float().numpy() for h in hidden])
+        return np.stack([h[0, -1].float().cpu().numpy() for h in hidden])
 
     def delta(self, task: str, data: str) -> np.ndarray:
         if task not in self._before:
@@ -224,9 +235,16 @@ def agentdojo_set(ex: Extractor):
 
 
 def main() -> int:
-    OUT.mkdir(exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--model", default="Qwen/Qwen3-0.6B")
+    parser.add_argument("--quant", choices=["nf4"], default=None, help="4-bit, GPU only")
+    args = parser.parse_args()
+    global OUT
+    # One directory per model and quantization: the feature caches must never cross.
+    OUT = RESULTS / (args.model.rsplit("/", 1)[-1] + (f"-{args.quant}" if args.quant else ""))
+    OUT.mkdir(parents=True, exist_ok=True)
     start = time.time()
-    ex = Extractor()
+    ex = Extractor(args.model, args.quant)
     train = dataset(160, TASKS[:6], INJECTIONS[:7])
     val = dataset(60, VAL_TASKS, VAL_INJECTIONS)
     xt = cached("train", lambda: np.stack([ex.delta(t, d) for t, d, _ in train]))
@@ -241,7 +259,9 @@ def main() -> int:
     layer = max(by_layer, key=lambda k: by_layer[k] or 0)
     probe = fit(xt[:, layer], yt)
     report = {
-        "model": MODEL,
+        "model": args.model,
+        "quant": args.quant,
+        "device": str(ex.model.device),
         "layer": layer,
         "val_auroc_by_layer": by_layer,
         "val": rates(list(probe(xv[:, layer])), yv),

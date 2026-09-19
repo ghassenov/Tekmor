@@ -156,6 +156,9 @@ class CausalJudge:
     #: float32 unless memory forbids it: bfloat16 was four times slower per call on the
     #: CPU this was measured on, and it moves the last digits of the probability.
     dtype: str = "float32"
+    #: "nf4" loads 4-bit weights with `dtype` as the compute dtype (bitsandbytes, a GPU and
+    #: not a declared dependency). A quantized judge is a different judge: record it.
+    quant: str | None = None
     calls: int = 0
     seconds: float = 0.0
     model: Any = field(default=None, repr=False)
@@ -175,9 +178,23 @@ class CausalJudge:
                 "the judge needs transformers and torch: uv sync --extra qwen"
             ) from None
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, dtype=getattr(torch, self.dtype)
-        )
+        if self.quant == "nf4":
+            from transformers import BitsAndBytesConfig
+
+            config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=getattr(torch, self.dtype),
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, quantization_config=config, device_map="auto"
+            )
+        elif self.quant is None:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, dtype=getattr(torch, self.dtype), device_map="auto"
+            )
+        else:
+            raise ValueError(f"unknown quantization {self.quant!r}")
         self.model.eval()
         # Every spelling of the two answers a tokenizer may put first, deduplicated.
         first = lambda word: self.tokenizer.encode(word, add_special_tokens=False)[0]  # noqa: E731
@@ -207,7 +224,7 @@ class CausalJudge:
             prompt = self.tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
-        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         with torch.no_grad():
             logits = self.model(**inputs).logits[0, -1].float()
         yes = torch.logsumexp(logits[self._yes], 0)

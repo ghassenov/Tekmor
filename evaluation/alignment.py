@@ -59,13 +59,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--judge", default="Qwen/Qwen3-0.6B")
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--dtype", default="float32", help="bfloat16 for models too big for RAM")
+    parser.add_argument("--quant", choices=["nf4"], default=None, help="4-bit, GPU only")
     parser.add_argument("--endorse", action="store_true")
     parser.add_argument("--dojo", action="store_true", help="also run AgentDojo (held out)")
     parser.add_argument("--suites", nargs="+", default=None)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
 
-    judge = CausalJudge(model_id=args.judge, name=args.judge.rsplit("/", 1)[-1], dtype=args.dtype)
+    judge = CausalJudge(
+        model_id=args.judge, name=args.judge.rsplit("/", 1)[-1], dtype=args.dtype, quant=args.quant
+    )
     monitor = ReferenceMonitor()
     auditor = AlignmentAuditor(monitor, judge, args.threshold)
 
@@ -140,6 +143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "judge": args.judge,
                 "judge_prompt": JUDGE_PROMPT,
                 "judge_dtype": args.dtype,
+                "judge_quant": args.quant,
                 "device": device,
                 "threshold": args.threshold,
                 "endorse_named": args.endorse,
