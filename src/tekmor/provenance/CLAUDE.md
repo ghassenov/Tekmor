@@ -20,8 +20,14 @@ copied from, and payload writes are capped against laundering. `Policy.argument_
 turns it on, and `research/experiments/argument_provenance/` pre-registers what it must
 show before it is adopted.
 
-**Not implemented:** field-level labels *within* one observation, and structured
-endorsement (the user attaching a resource instead of naming it).
+Field-level labels *within* one observation are the follow-up arm
+(`TaintTracker.field_labels`, also off): a source vouches for a value it returned, never
+for a fragment of one. Measured, not adopted:
+`research/experiments/argument_provenance/field_labels.md`.
+
+**Not implemented:** cross-step provenance for a value laundered through world state into
+an opaque handle (now the largest residual), and structured endorsement (the user
+attaching a resource instead of naming it).
 
 **The deliberate coarseness, recorded as the rules below require.** Influence is
 call-level and prefix-monotone: an observation the agent has seen taints every action it
@@ -55,7 +61,9 @@ labels (secrets, canaries) are tracked separately from integrity.
 - **Provenance is field-level, not call-level.** A single tool result can mix trust
   levels across fields; preserve that granularity. Collapsing a result to one label is
   the documented "argument-level residual" gap, so it must be a deliberate, recorded
-  choice.
+  choice. Measured consequence: a trusted result is a *container* of text other
+  principals authored, so vouching for a fragment of a field is how a correct label
+  becomes an authorization (`docs/decisions.md`, 2026-09-20).
 - **Raising trust requires an explicit endorsement primitive**, never an implicit side
   effect. `taint.endorse` is the only one. It records who endorsed the content
   (`Source.endorsed_by`) and never rewrites `trust`, and every decision event the
