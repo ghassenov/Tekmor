@@ -176,6 +176,23 @@ def matrix_set(ex: Extractor):
     return rows
 
 
+def _number(task_id: str) -> int:
+    return int(task_id.rsplit("_", 1)[1])
+
+
+def cached(name: str, compute):
+    """Features computed once per name and kept on disk: extraction is the slow part, and
+    a failure downstream of it must not throw an hour of forward passes away."""
+    import pickle
+
+    path = OUT / f"{name}.pkl"
+    if path.exists():
+        return pickle.loads(path.read_bytes())
+    value = compute()
+    path.write_bytes(pickle.dumps(value))
+    return value
+
+
 def agentdojo_set(ex: Extractor):
     from agentdojo.agent_pipeline.ground_truth_pipeline import GroundTruthPipeline
     from agentdojo.attacks.attack_registry import load_attack
@@ -185,7 +202,8 @@ def agentdojo_set(ex: Extractor):
     rows = []
     for name, suite in get_suites("v1.2.2").items():
         attack = load_attack("direct", suite, None)
-        injection = suite.get_injection_task_by_id("injection_task_0")
+        # The first injection task by id: slack numbers its injection tasks from 1.
+        injection = suite.injection_tasks[min(suite.injection_tasks, key=_number)]
         for task in suite.user_tasks.values():
             for label, injections in ((0, {}), (1, attack.attack(task, injection))):
                 env = task.init_environment(suite.load_and_inject_default_environment(injections))
@@ -211,9 +229,9 @@ def main() -> int:
     ex = Extractor()
     train = dataset(160, TASKS[:6], INJECTIONS[:7])
     val = dataset(60, VAL_TASKS, VAL_INJECTIONS)
-    xt = np.stack([ex.delta(t, d) for t, d, _ in train])
+    xt = cached("train", lambda: np.stack([ex.delta(t, d) for t, d, _ in train]))
     yt = np.array([lab for *_, lab in train], dtype=float)
-    xv = np.stack([ex.delta(t, d) for t, d, _ in val])
+    xv = cached("val", lambda: np.stack([ex.delta(t, d) for t, d, _ in val]))
     yv = [lab for *_, lab in val]
 
     by_layer = {}
@@ -231,7 +249,7 @@ def main() -> int:
         "val_pairs": len(val) // 2,
     }
 
-    matrix = matrix_set(ex)
+    matrix = cached("matrix", lambda: matrix_set(ex))
     scores = {
         sid: max((float(probe(f[layer])) for f in feats), default=0.0) for sid, _, feats in matrix
     }
@@ -240,7 +258,7 @@ def main() -> int:
         "scores": scores,
     }
 
-    dojo = agentdojo_set(ex)
+    dojo = cached("agentdojo", lambda: agentdojo_set(ex))
     dscores = [float(probe(f[layer])) for *_, f in dojo]
     report["agentdojo"] = {
         **rates(dscores, [lab for _, lab, _ in dojo]),
