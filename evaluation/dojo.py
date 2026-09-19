@@ -57,6 +57,7 @@ from agentdojo.types import (
     ChatToolResultMessage,
     text_content_block_from_string,
 )
+from pydantic import BaseModel
 
 from evaluation.harness import RESULTS, _git
 from tekmor import __version__
@@ -72,7 +73,7 @@ from tekmor.defense import (
 )
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
 from tekmor.policy.core import Policy
-from tekmor.provenance.taint import TaintTracker, endorse
+from tekmor.provenance.taint import TaintTracker, endorse, leaves
 from tekmor.provenance.trust import Source, TrustLevel
 from tekmor.runtime.gateway import permitted
 
@@ -211,6 +212,23 @@ def policy(
     )
 
 
+def fields(result: Any) -> tuple[str, ...]:
+    """The leaf values of a tool result, for field-level vouching.
+
+    `tool_result_to_str`'s own shapes: a pydantic model, a list of models or scalars, or
+    a plain value. Dumped to plain data, `leaves` then gives exactly what an argument
+    value is traced against, so both sides of the match use one definition of a value.
+    A plain string result has no fields and yields none, which falls back to call level.
+    """
+    if isinstance(result, BaseModel):
+        result = result.model_dump()
+    elif isinstance(result, list):
+        result = [i.model_dump() if isinstance(i, BaseModel) else i for i in result]
+    else:
+        return ()
+    return tuple(leaf for leaf in leaves(result) if leaf is not None)
+
+
 def label(suite: str, tool: str) -> Source:
     """The provenance of one tool result. Unlisted tools are untrusted, not trusted."""
     trust = (
@@ -231,11 +249,13 @@ class TekmorExecutor(BasePipelineElement):
 
     name = "tekmor"
 
-    def __init__(self, defense: Defense, suite: str, policy: Policy) -> None:
+    def __init__(
+        self, defense: Defense, suite: str, policy: Policy, field_labels: bool = False
+    ) -> None:
         self.defense = defense
         self.suite = suite
         self.policy = policy
-        self.taint = TaintTracker()
+        self.taint = TaintTracker(field_labels=field_labels)
         self.decisions: list[Decision] = []
         #: The calls that actually ran, which is the trace AgentDojo's checks are scored
         #: against (`run_pair`): a refused call was proposed, never made.
@@ -273,7 +293,7 @@ class TekmorExecutor(BasePipelineElement):
                     source = label(self.suite, allowed.tool)
                     if self.policy.endorse_named:
                         source = endorse(source, allowed.args, query)
-                    self.taint.observe(source, output)
+                    self.taint.observe(source, output, fields(result))
             results.append(
                 ChatToolResultMessage(
                     role="tool",
@@ -364,7 +384,15 @@ def defenses() -> tuple[Defense, ...]:
 
 
 def run_pair(
-    suite_name, suite, defense, user_task, injection_task, attack, endorse=False, **roles
+    suite_name,
+    suite,
+    defense,
+    user_task,
+    injection_task,
+    attack,
+    endorse=False,
+    field_labels=False,
+    **roles,
 ) -> DojoRecord:
     """One run, scored by AgentDojo's own checks against the calls that *executed*.
 
@@ -375,7 +403,9 @@ def run_pair(
     the suite's own, pinned by `VERSION`.
     """
     tools = [tool.name for tool in suite.tools]
-    executor = TekmorExecutor(defense, suite_name, policy(suite_name, tools, endorse, **roles))
+    executor = TekmorExecutor(
+        defense, suite_name, policy(suite_name, tools, endorse, **roles), field_labels
+    )
     injections = attack.attack(user_task, injection_task) if injection_task else {}
     environment = user_task.init_environment(suite.load_and_inject_default_environment(injections))
     pre_environment = environment.model_copy(deep=True)
@@ -405,6 +435,7 @@ def evaluate(
     limit: int | None = None,
     endorse: bool = False,
     build: Callable[[], Sequence[Defense]] = defenses,
+    field_labels: bool = False,
     **roles: bool,
 ) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
@@ -422,7 +453,17 @@ def evaluate(
             attack = load_attack("direct", suite, None)
             for user_task in users:
                 records.append(
-                    run_pair(name, suite, defense, user_task, None, attack, endorse, **roles)
+                    run_pair(
+                        name,
+                        suite,
+                        defense,
+                        user_task,
+                        None,
+                        attack,
+                        endorse,
+                        field_labels,
+                        **roles,
+                    )
                 )
                 for injection_task in injections:
                     records.append(
@@ -434,6 +475,7 @@ def evaluate(
                             injection_task,
                             attack,
                             endorse,
+                            field_labels,
                             **roles,
                         )
                     )
@@ -527,6 +569,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="let endorsement raise target arguments too (Policy.endorse_targets)",
     )
+    parser.add_argument(
+        "--field-labels",
+        action="store_true",
+        help="vouch per field of a tool result, not per result (TaintTracker.field_labels)",
+    )
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
 
@@ -534,6 +581,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.suites,
         args.limit,
         args.endorse,
+        field_labels=args.field_labels,
         arguments=args.arguments,
         endorse_targets=args.endorse_targets,
     )
@@ -545,6 +593,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         + ["arguments"] * args.arguments
         + ["endorsed"] * args.endorse
         + ["targets"] * args.endorse_targets
+        + ["fields"] * args.field_labels
     )
     raw = args.results / "raw" / f"{stamp}-{tag}"
     processed = args.results / "processed" / f"{stamp}-{tag}"
@@ -573,6 +622,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "endorse_named": args.endorse,
                 "argument_provenance": args.arguments,
                 "endorse_targets": args.endorse_targets,
+                "field_labels": args.field_labels,
                 "content_args": sorted(CONTENT_ARGS),
                 "target_args": sorted(TARGET_ARGS),
                 "config": {
