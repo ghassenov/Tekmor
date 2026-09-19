@@ -7,9 +7,11 @@ named `Signals` that `signals.extract` computes, and reports the `risk` score
 `defense/risk.py`.
 
 `CanaryScanner` layers the encoding-aware secret scan (CANARY-FLOW) over any defense,
-for the argument-level residual the provenance rule cannot see.
+for the argument-level residual the provenance rule cannot see, and `AlignmentAuditor`
+(Proposal B) asks a judge about the gray-zone actions the rules allowed. Both only raise.
 """
 
+from tekmor.defense.auditor import AlignmentAuditor, Judge
 from tekmor.defense.canary import CanaryScanner
 from tekmor.defense.core import (
     Action,
@@ -28,11 +30,13 @@ from tekmor.defense.signals import Signals, extract
 
 __all__ = [
     "Action",
+    "AlignmentAuditor",
     "CanaryScanner",
     "ActionProvenance",
     "AgentState",
     "Decision",
     "Defense",
+    "Judge",
     "ReferenceMonitor",
     "Signals",
     "Source",

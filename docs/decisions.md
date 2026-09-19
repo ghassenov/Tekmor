@@ -1337,3 +1337,75 @@ user meant. An attacker who can create a resource whose name is a phrase in the 
 borrows the endorsement (`ponytail:` in `taint.py`). Structured endorsement, where the
 user attaches the resource, is the upgrade and needs an interface. None of these
 numbers says what a model would do.
+
+## Proposal B: the auditor is built and monotone; the judges this machine can run either say yes to everything or pay for their no's in benign work
+
+**Context.** Endorsement put sensitive actions driven by untrusted content back into
+reach (AgentDojo ASR 0.04 → 0.15). Those actions, and every non-sensitive call made after
+reading hostile content, are the *gray zone*: the rules allowed them, and nothing in
+their provenance tells the attack from the work. Proposal B puts a task-alignment judge
+there. Its evaluation plan asks for the auditor's marginal value, its latency, and how far
+it can be trusted.
+
+**Decided. `defense/auditor.py`: `AlignmentAuditor` wraps a defense and asks a `Judge`
+one question about each gray-zone ALLOW: does this call serve what the user asked for?**
+
+- **Gray is read off the labels as they arrived** (`Source.trust`, not the endorsed
+  `integrity`). Endorsed content is exactly what the rules can no longer see.
+- **Monotone-safe, as `CanaryScanner` is.** Anything the core did not allow never reaches
+  the judge. An unconfirmed ALLOW becomes REWRITE where the policy vets a downgrade, and
+  ESCALATE otherwise. It never becomes BLOCK, because a judge's "no" is a reason to ask a
+  human, not proof. Risk is raised to the severity it stands in for. A raising judge
+  fails closed through `mediate()`. All of this is asserted in
+  `tests/security/test_auditor.py`, with each step decided by both defenses on
+  identical inputs.
+- **The judge sees the authenticated task and the call, never what the agent read.** The
+  public reason code is `TASK_ALIGNMENT_UNCONFIRMED`, and the probability stays private.
+- **`runtime.qwen.CausalJudge`** takes one forward pass over any local causal LM and
+  returns the softmax of the "yes" against the "no" logits. It is deterministic per
+  model, dtype and device, and cached per (task, call). The prompt was chosen among three
+  framings on eight pairs drawn from **the matrix only**. The threshold is 0.5, the
+  judge's own "more likely no than yes", **not fitted**. AgentDojo stayed held out.
+
+**What it measured** (`evaluation/alignment.py`, endorsement on, which is the setting
+the auditor is for; this machine is CPU-only):
+
+```
+                               matrix (dev, 26)            AgentDojo (held out, 583)
+judge                          BTU   ASR   escal.  flips   BTU and ASR per suite     s/call
+Qwen3-0.6B  (fp32)             1.00  0.11     6      0     identical to tekmor        1.1-1.6
+Phi-3-mini  (bf16)             0.75  0.06    70      3     not run: ~20 s/call        ~20
+tekmor (no auditor)            1.00  0.11     6      -
+```
+
+- **Qwen3-0.6B never says no.** 575 distinct gray-zone calls across the matrix and
+  AgentDojo, lowest answer 0.86, median 0.99. Marginal value zero, cost 1.1–1.6 s per
+  uncached call. On the eight dev pairs its AUROC ranged from 0.38 to 1.0 across prompts,
+  all inside 0.99–1.00: noise around a constant.
+- **Phi-3-mini separates, and cannot be afforded, and costs utility at the unfitted
+  threshold.** It stops the endorsed-invoice attack (ASR 0.11 → 0.06). It also refuses
+  the honest endorsed invoice and the SOC phishing triage, so BTU falls 1.00 → 0.75, and
+  it escalates 70 actions where the core escalated 6. At ~20 s per call, AgentDojo's 514
+  gray-zone judgements would take nearly three hours per configuration, so it was not run
+  held out. The one held-out number this proposal needs from it does not exist.
+- **The endorsed pair shows the ceiling.** The honest and tampered invoices differ only in
+  the payee, and the judge is shown the task and the call. Telling them apart needs the
+  judge to know which account is right. No judge that sees only the request can know
+  that. It can only refuse both, as Phi-3 did, which is `deny-gray` with extra steps.
+
+**Verdict.** The mechanism stays: it is monotone, tested, and costs nothing when the judge
+agrees. No judge available here earns a place in a default configuration. The one that
+never refuses adds latency and nothing else. The one that refuses has not been measured
+held out, and on the dev set it bought one attack for two benign tasks. Proposal B is
+recorded as **built, measured on a proxy judge, not adopted**. Proposal B's own plan also
+asks how susceptible the auditor is to adaptive attack. That was not measured, because
+there is no judge worth attacking.
+
+**Rejected.** Fitting the threshold on the dev set (eight pairs, and the result would be
+a report of the fit). Showing the judge the documents (the doc's mitigation for an
+auditor that is itself an injection target). Letting the auditor BLOCK. Reporting Phi-3's
+dev-set row as if it were held out.
+
+**Not claimed.** Nothing here measures a strong judge. Task Shield's and AlignmentCheck's
+numbers were produced with frontier models on AgentDojo with a real agent, and nothing
+above is comparable to them.
