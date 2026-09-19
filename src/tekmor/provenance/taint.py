@@ -27,7 +27,7 @@ which influences count. It never invents trust for a value nobody supplied.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -49,18 +49,31 @@ class TaintTracker:
     sources: tuple[Source, ...] = (USER_REQUEST,)
     #: The text of `USER_REQUEST`. Values are traced to it like to any observation.
     request: str = ""
+    #: Vouch per field instead of per observation: a source vouches for a value only
+    #: when the value *is* one of the fields it returned, never when it merely appears
+    #: inside one. `research/experiments/argument_provenance/field_labels.md`.
+    field_labels: bool = False
     #: What each observation said, for tracing argument values. Held in memory for the
     #: run only and never logged: it may contain secrets.
     _texts: dict[Source, str] = field(default_factory=dict, repr=False)
+    #: The leaf values each observation returned, when the driver could split it into
+    #: fields. Empty for a source whose result was unstructured text.
+    _fields: dict[Source, set[str]] = field(default_factory=dict, repr=False)
     #: Payload the agent wrote into the world, at the integrity of the call that wrote it.
     _writes: list[tuple[str, TrustLevel]] = field(default_factory=list, repr=False)
     #: Observations that contain a lower-integrity write, and so may not vouch for a value.
     _unvouched: set[Source] = field(default_factory=set, repr=False)
 
-    def observe(self, source: Source, text: str = "") -> None:
-        """Record that the agent has seen `source`. Influence is never removed."""
+    def observe(self, source: Source, text: str = "", fields: Iterable[str] = ()) -> None:
+        """Record that the agent has seen `source`. Influence is never removed.
+
+        `fields` are the leaf values of the structured result, when the driver has it.
+        They are what `field_labels` vouching matches against; without them a source
+        falls back to matching anywhere in its text, which is the call-level rule.
+        """
         if source not in self.sources:
             self.sources = (*self.sources, source)
+        self._fields.setdefault(source, set()).update(fields)
         if not text:
             return
         self._texts[source] = f"{self._texts.get(source, '')}\n{text}"
@@ -83,15 +96,29 @@ class TaintTracker:
             self._writes += [(leaf, level) for leaf in leaves(args[name]) if leaf is not None]
 
     def origins(self, args: Mapping[str, Any]) -> tuple[ArgumentOrigin, ...]:
-        """For every argument, the observations each of its values was copied from."""
-        vouchers = [(USER_REQUEST, self.request)] + [
-            (source, text) for source, text in self._texts.items() if source not in self._unvouched
+        """For every argument, the observations each of its values was copied from.
+
+        A voucher matches a value anywhere in its text, unless `field_labels` is on and
+        the driver split it into fields, in which case the value must *be* one of them.
+        The user's request is never split: it is prose the user authored whole, where a
+        tool result is a container holding text other principals wrote.
+        """
+        vouchers = [(USER_REQUEST, self.request, None)] + [
+            (source, text, self._fields.get(source) if self.field_labels else None)
+            for source, text in self._texts.items()
+            if source not in self._unvouched
         ]
         return tuple(
             ArgumentOrigin(
                 name,
                 tuple(
-                    () if leaf is None else tuple(s for s, text in vouchers if leaf in text)
+                    ()
+                    if leaf is None
+                    else tuple(
+                        s
+                        for s, text, fields in vouchers
+                        if (leaf in fields if fields else leaf in text)
+                    )
                     for leaf in leaves(value)
                 ),
             )
