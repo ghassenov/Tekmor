@@ -25,21 +25,26 @@ the run loop and the `ToolGateway` in `runtime/`.
 **Not implemented:** argument redaction as a rewrite, and selective escalation — the
 deferral half of CALIB-RISK, which would give the score authority over a verdict and is
 declined in `docs/decisions.md`. The severities in `defense/risk.py` are still ordinal:
-Platt-scaling them against held-out scenarios is now implemented and *measured*
-(`evaluation/calibration.py`), and on this matrix it makes ECE worse, so the scale in use
-remains the hand-ordered one. ECE is measured and reported, not achieved.
+Platt-scaling them against held-out scenarios is implemented and *measured*
+(`evaluation/calibration.py`), and on the full twenty-four-scenario matrix it improves
+ECE (0.07 -> 0.04) where on seven it made it worse — while still costing a little ranking
+— so the scale in use remains the hand-ordered one. ECE is measured and reported, not
+achieved.
 
 **Evaluated, on this repository's own matrix.** `evaluation/harness.py` runs every
 scenario under every defense and scores BTU, ASR, CVR, FBR and UER from world state,
 plus precision/recall/F1 over per-action labels and AUROC/AUPRC/ECE over the risk score,
 and Platt-scales that score leave-one-scenario-out to measure whether its magnitudes are
-probabilities (they are not; the fit is worse than the ordinal scale on seven scenarios).
-`docs/decisions.md` records each measurement and its limits. Seven scenarios in
-three domains is a matrix, not a benchmark, and the external validation (AgentDojo),
-the robustness variants and the adaptive attacker are still ahead.
+probabilities. It also reports the pass/fail grid by attack family and difficulty level.
+`docs/decisions.md` records each measurement and its limits. Twenty-four scenarios in
+three domains, covering the seven attack families at levels 1-5, is a matrix, not a
+benchmark: the external validation (AgentDojo), the generated robustness variants and the
+adaptive attacker are still ahead, and level 4 is represented by static rewordings until
+that attacker exists.
 
 A scenario states its own ground truth (`success` / `attack_success`: conditions over
-world state) and that, like `id` and `benign`, never reaches a defense. The *per-action*
+world state) and its place in the matrix (`family`, `level`), and all of it, like `id`
+and `benign`, never reaches a defense. The *per-action*
 labels the detection metrics need are not stated at all: `evaluation.metrics.unsafe_steps`
 derives them by replaying each prefix undefended, so no one hand-labels which step the
 defense was supposed to stop.
