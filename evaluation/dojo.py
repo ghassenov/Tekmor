@@ -72,7 +72,7 @@ from tekmor.defense import (
 )
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
 from tekmor.policy.core import Policy
-from tekmor.provenance.taint import TaintTracker
+from tekmor.provenance.taint import TaintTracker, endorse
 from tekmor.provenance.trust import Source, TrustLevel
 from tekmor.runtime.gateway import permitted
 
@@ -166,7 +166,7 @@ SUITES: Mapping[str, SuiteConfig] = {
 }
 
 
-def policy(suite: str, tools: Sequence[str]) -> Policy:
+def policy(suite: str, tools: Sequence[str], endorse: bool = False) -> Policy:
     """The Tekmor policy for one suite: every tool permitted, the sensitive ones guarded."""
     config = SUITES[suite]
     return Policy(
@@ -174,6 +174,7 @@ def policy(suite: str, tools: Sequence[str]) -> Policy:
         sensitive_tools=config.sensitive,
         allowed_tools=frozenset(tools),
         min_integrity=TrustLevel.TRUSTED_INTERNAL,
+        endorse_named=endorse,
     )
 
 
@@ -233,7 +234,10 @@ class TekmorExecutor(BasePipelineElement):
                 output = tool_result_to_str(result)
                 self.executed.append(FunctionCall(function=allowed.tool, args=dict(allowed.args)))
                 if error is None:
-                    self.taint.observe(label(self.suite, allowed.tool))
+                    source = label(self.suite, allowed.tool)
+                    if self.policy.endorse_named:
+                        source = endorse(source, allowed.args, query)
+                    self.taint.observe(source)
             results.append(
                 ChatToolResultMessage(
                     role="tool",
@@ -323,7 +327,9 @@ def defenses() -> tuple[Defense, ...]:
     return AllowAll(), DenySensitive(), KeywordFilter(), ReferenceMonitor()
 
 
-def run_pair(suite_name, suite, defense, user_task, injection_task, attack) -> DojoRecord:
+def run_pair(
+    suite_name, suite, defense, user_task, injection_task, attack, endorse=False
+) -> DojoRecord:
     """One run, scored by AgentDojo's own checks against the calls that *executed*.
 
     `TaskSuite.run_task_with_pipeline` is not used because it scores trace-based checks
@@ -333,7 +339,7 @@ def run_pair(suite_name, suite, defense, user_task, injection_task, attack) -> D
     the suite's own, pinned by `VERSION`.
     """
     tools = [tool.name for tool in suite.tools]
-    executor = TekmorExecutor(defense, suite_name, policy(suite_name, tools))
+    executor = TekmorExecutor(defense, suite_name, policy(suite_name, tools, endorse))
     injections = attack.attack(user_task, injection_task) if injection_task else {}
     environment = user_task.init_environment(suite.load_and_inject_default_environment(injections))
     pre_environment = environment.model_copy(deep=True)
@@ -358,7 +364,9 @@ def run_pair(suite_name, suite, defense, user_task, injection_task, attack) -> D
     )
 
 
-def evaluate(suites: Sequence[str], limit: int | None = None) -> list[DojoRecord]:
+def evaluate(
+    suites: Sequence[str], limit: int | None = None, endorse: bool = False
+) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
 
     `limit` keeps the first N user tasks and N injection tasks of each suite, for a
@@ -373,10 +381,10 @@ def evaluate(suites: Sequence[str], limit: int | None = None) -> list[DojoRecord
         for defense in defenses():
             attack = load_attack("direct", suite, None)
             for user_task in users:
-                records.append(run_pair(name, suite, defense, user_task, None, attack))
+                records.append(run_pair(name, suite, defense, user_task, None, attack, endorse))
                 for injection_task in injections:
                     records.append(
-                        run_pair(name, suite, defense, user_task, injection_task, attack)
+                        run_pair(name, suite, defense, user_task, injection_task, attack, endorse)
                     )
     return records
 
@@ -453,15 +461,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--suites", nargs="+", default=list(SUITES), choices=list(SUITES))
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--endorse",
+        action="store_true",
+        help="endorse content the user named (Policy.endorse_named)",
+    )
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
 
-    records = evaluate(args.suites, args.limit)
+    records = evaluate(args.suites, args.limit, args.endorse)
     rows = score(records)
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    raw = args.results / "raw" / f"{stamp}-agentdojo"
-    processed = args.results / "processed" / f"{stamp}-agentdojo"
+    tag = "agentdojo-endorsed" if args.endorse else "agentdojo"
+    raw = args.results / "raw" / f"{stamp}-{tag}"
+    processed = args.results / "processed" / f"{stamp}-{tag}"
     raw.mkdir(parents=True, exist_ok=True)
     processed.mkdir(parents=True, exist_ok=True)
     (raw / "runs.jsonl").write_text(
@@ -484,6 +498,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "approver": "deny",
                 "suites": args.suites,
                 "limit": args.limit,
+                "endorse_named": args.endorse,
                 "config": {
                     name: {"sensitive": sorted(c.sensitive), "trusted": sorted(c.trusted)}
                     for name, c in SUITES.items()
