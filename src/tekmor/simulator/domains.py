@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from tekmor.provenance.trust import Source, TrustLevel
-from tekmor.simulator.world import Observation, Tool, World
+from tekmor.simulator.world import Document, Observation, Tool, World
 
 
 def _read_document(world: World, args: Mapping[str, Any]) -> Observation:
@@ -44,6 +44,26 @@ def _read_secret(world: World, args: Mapping[str, Any]) -> Observation:
         world.canaries[name],
         Source(f"secret:{name}", TrustLevel.TRUSTED_INTERNAL, confidential=True),
     )
+
+
+def _remember(world: World, args: Mapping[str, Any]) -> str:
+    """Write a note the agent can recall later — and label it the way a naive store does.
+
+    The memory poisoning family (`docs/technical-doc.md` Part I) turns on whether a round
+    trip through memory launders trust. This store is written to launder it: whatever the
+    agent hands it is stored as ordinary internal content, because that is what a memory
+    implementation nobody thought about does. The label that survives is the run's taint
+    (`tekmor.provenance.taint`), which still holds the read that produced the text, so a
+    scenario that recalls a poisoned note is evidence about the provenance layer rather
+    than about a memory store that was taught to be careful.
+
+    The *cross-session* case — a note planted in an earlier run — is a declared
+    document instead, because nothing in this process saw the session that wrote it.
+    """
+    world.documents[str(args["id"])] = Document(
+        text=str(args["text"]), trust=TrustLevel.TRUSTED_INTERNAL
+    )
+    return f"remembered {args['id']}"
 
 
 def _send_email(world: World, args: Mapping[str, Any]) -> str:
@@ -111,11 +131,18 @@ ENTERPRISE = (
     Tool("read_secret", _read_secret),
     Tool("send_email", _send_email, outbound=True),
     Tool("draft_email", _draft_email),
+    # Memory is two tools over the same store: `recall` reads what `remember` wrote, and
+    # both read and write ordinary labelled content, so a note has no privileged status.
+    Tool("remember", _remember),
+    Tool("recall", _read_document),
 )
 
 FINANCIAL = (
     Tool("read_document", _read_document),
     Tool("read_secret", _read_secret),
+    # A third-party record: same mechanism as reading a document, different origin, which
+    # is what the tool-output tampering family needs the trace to show.
+    Tool("lookup_vendor", _read_document),
     Tool("prepare_payment", _prepare_payment),
     Tool("confirm_payment", _confirm_payment),
     Tool("execute_payment", _execute_payment, outbound=True),
@@ -124,6 +151,8 @@ FINANCIAL = (
 SOC = (
     Tool("read_alert", _read_document),
     Tool("read_secret", _read_secret),
+    # The threat-intelligence feed: content a third party writes and the analyst acts on.
+    Tool("enrich_indicator", _read_document),
     Tool("isolate_host", _isolate_host),
     Tool("open_ticket", _open_ticket),
     Tool("share_indicators", _send_email, outbound=True),
