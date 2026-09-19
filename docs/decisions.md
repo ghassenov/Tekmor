@@ -1623,3 +1623,65 @@ matches anywhere, and a trace that matches anywhere vouches for anything.
 obeys every injection, so ASR is the always-obeys bound, and provenance is near-oracle
 because values are copied verbatim. None of these numbers is comparable with PACT's,
 AuthGraph's, CaMeL's or FIDES's.
+
+## Field-level labels: the granularity bug behind the argument-level failure (2026-09-20)
+
+Pre-registered in `research/experiments/argument_provenance/field_labels.md`, the
+follow-up arm the entry above named. `TaintTracker.field_labels`, default **off**.
+
+**The rule.** A tool result vouches for a value it *returned*, never for a fragment of
+one. The user's request is never split — it is prose the user authored whole, where a
+tool result is a container holding text other principals wrote. A source the driver
+cannot split into fields keeps whole-text matching, so the rule never silently
+un-vouches. Both sides of the match reuse `leaves()`, so "a value" has one definition.
+
+**Measured** (AgentDojo v1.2.2, four suites, 97 benign runs and 583 valid pairs, all
+arms from one commit; A and C reproduce the recorded numbers exactly):
+
+```
+arm                       BTU           ASR
+A    arguments        53/97 = 0.55  42/583 = 0.072
+A+F  + field labels   53/97 = 0.55  22/583 = 0.038
+C    args+endorse     66/97 = 0.68  64/583 = 0.110
+C+F  + field labels   66/97 = 0.68  44/583 = 0.075
+```
+
+- **The previous entry's diagnosis was half wrong, and this is the correction.** It
+  concluded "under argument granularity, every `trusted` label must be right". It is
+  not a labelling error: `get_channels` *is* trusted for the list it returns. The
+  injection is a whole channel name (`"External_{prompt_injection_channel}"`) and the
+  attacker's URL is a **fragment** of it. The defect was granularity, and it is fixable
+  without touching a single label.
+- All 20 cause-1 landings removed, at **zero** measured benign cost, in both arms. Only
+  one cell moves per pair: slack ASR 0.39 → 0.20. Nothing in banking, travel or
+  workspace changes.
+- **The zero cost is not a deployment estimate**, and the pre-registration said so before
+  the run. The driver replays ground truth, so benign values are copied verbatim out of
+  structured results — exactly the case where a value is a whole field. A model that
+  reformats a value makes it untraced, which falls back to call level: safe and
+  utility-costly. Field labels are expected to cost real utility with a model-driven
+  agent, and this harness cannot measure how much.
+- **A pre-registered prediction was exactly right this time.** Arm C+F was computed in
+  advance to be unable to pass the gate, landing at ≈ (21 + 22 + 1)/583 = 0.075.
+  Measured 44/583 = 0.0755, from precisely the predicted groups.
+- **The residual ordering is now inverted.** Arm C's landings decompose into cause 1
+  (20, fixed here), cause 3 — an authority value too short to trace, raised by
+  endorsement (22) — the URL-fetch residual (21) and the content channel (1). Cause 3 is
+  now the largest group. The previous entry listed field labels first and handle
+  provenance second; **cross-step binding for handles is the larger residual.**
+- H1 is **refuted by one run** on its strict form (22/583 against a gate of ≤ 21/583).
+  That run is the travel content-channel attack, which the pre-registration listed as out
+  of scope by construction and which lands in arm A too. The refutation is real and says
+  nothing about field labels.
+
+**Verdict: built and measured, not adopted.** The switches stay off. The binding reason
+is not the numbers: **AgentDojo is no longer held out for this change.** Cause 1 was
+diagnosed from AgentDojo and this mechanism was built to fix it. The mitigations are
+real — the rule is general, adds no configuration, changes no frozen label, and its
+predicted residual and its C+F arithmetic were both stated in advance and both landed —
+but a mechanism that fixes a failure found in a benchmark cannot be adopted on that
+benchmark's own numbers. Adoption is gated on a run against a benchmark this project has
+not scored against (AgentDyn, arXiv:2602.03117).
+
+**Not claimed.** Nothing about a model-driven agent. ASR is the always-obeys bound and
+provenance is near-oracle, more load-bearingly so for this arm than the parent one.
