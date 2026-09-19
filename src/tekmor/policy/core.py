@@ -56,6 +56,19 @@ class Policy:
     #: Endorse content the user named verbatim in the request (`provenance.taint.endorse`).
     #: Off unless a deployment turns it on: it is the one way trust is ever raised.
     endorse_named: bool = False
+    #: Judge Trusted-Action on the provenance of each argument instead of the whole call
+    #: (`provenance.taint.ArgumentOrigin`). Off by default: it is an experiment,
+    #: `research/experiments/argument_provenance/`.
+    argument_provenance: bool = False
+    #: Argument names that carry payload (a body, a subject, a note). Untrusted content
+    #: may fill them, so argument-level Trusted-Action does not judge them.
+    #: Confidentiality still does: Permitted-Flow is unchanged.
+    content_args: frozenset[str] = frozenset()
+    #: Argument names that name a destination, a principal or a credential. Unless
+    #: `endorse_targets` is set, endorsement never raises them: the user vouching for a
+    #: document lets its content drive their request, not its addresses.
+    target_args: frozenset[str] = frozenset()
+    endorse_targets: bool = False
     version: int = 1
 
 

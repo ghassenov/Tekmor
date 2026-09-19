@@ -77,7 +77,7 @@ def run(
     adapter = adapter or ScriptedModel(scenario.steps)
     run_id = run_id or f"{scenario.id}@{scenario.version}:{defense.name}"
 
-    taint = TaintTracker()
+    taint = TaintTracker(request=scenario.task)
     observations: list[str] = []
     outcomes: list[StepOutcome] = []
 
@@ -89,7 +89,7 @@ def run(
         if action is None:
             break
 
-        provenance = ActionProvenance.of(taint.sources)
+        provenance = ActionProvenance.of(taint.sources, taint.origins(action.args))
         decision = mediate(defense, state, action, provenance, scenario.policy)
 
         run_step = gateway.execute(action, decision)
@@ -112,12 +112,15 @@ def run(
                 )
             )
         if run_step.source is not None:
+            # The call ran and succeeded. Its payload is recorded before its own result
+            # is observed, so the write carries the integrity of what drove it.
+            taint.wrote(run_step.executed.args, scenario.policy.content_args)
             source = run_step.source
             if scenario.policy.endorse_named:
                 # The call that *executed* produced the observation, so its arguments
                 # are the ones that say what was read.
                 source = endorse(source, run_step.executed.args, scenario.task)
-            taint.observe(source)
+            taint.observe(source, run_step.result or "")
         outcomes.append(
             StepOutcome(action, decision, run_step.executed, run_step.result, run_step.error)
         )

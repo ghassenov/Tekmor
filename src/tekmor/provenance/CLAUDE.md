@@ -14,8 +14,14 @@ base64 at each of the three byte alignments).
 request, if merely `UNTRUSTED_*`, is raised to `ENDORSED` (`TRUSTED_INTERNAL`) for
 integrity only, when the policy sets `endorse_named`. See `docs/decisions.md`.
 
-**Not implemented:** field-level provenance, and structured endorsement (the user
-attaching a resource instead of naming it).
+**Experimental, off by default:** argument-level origins (`TaintTracker.origins`,
+`ArgumentOrigin`). Each argument value is traced verbatim to the observations it was
+copied from, and payload writes are capped against laundering. `Policy.argument_provenance`
+turns it on, and `research/experiments/argument_provenance/` pre-registers what it must
+show before it is adopted.
+
+**Not implemented:** field-level labels *within* one observation, and structured
+endorsement (the user attaching a resource instead of naming it).
 
 **The deliberate coarseness, recorded as the rules below require.** Influence is
 call-level and prefix-monotone: an observation the agent has seen taints every action it

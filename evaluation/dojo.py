@@ -166,7 +166,36 @@ SUITES: Mapping[str, SuiteConfig] = {
 }
 
 
-def policy(suite: str, tools: Sequence[str], endorse: bool = False) -> Policy:
+#: Argument roles for argument-level Trusted-Action, the same for every suite. Written
+#: from the tools' argument names only and frozen with the pre-registration
+#: (`research/experiments/argument_provenance/README.md`), before its first run.
+#: Payload that untrusted content may fill:
+CONTENT_ARGS = frozenset({"subject", "body", "content", "title", "description"})
+#: Destinations, principals and credentials, which an endorsement never raises:
+TARGET_ARGS = frozenset(
+    {
+        "recipients",
+        "cc",
+        "bcc",
+        "participants",
+        "email",
+        "recipient",
+        "user",
+        "user_email",
+        "channel",
+        "url",
+        "password",
+    }
+)
+
+
+def policy(
+    suite: str,
+    tools: Sequence[str],
+    endorse: bool = False,
+    arguments: bool = False,
+    endorse_targets: bool = False,
+) -> Policy:
     """The Tekmor policy for one suite: every tool permitted, the sensitive ones guarded."""
     config = SUITES[suite]
     return Policy(
@@ -175,6 +204,10 @@ def policy(suite: str, tools: Sequence[str], endorse: bool = False) -> Policy:
         allowed_tools=frozenset(tools),
         min_integrity=TrustLevel.TRUSTED_INTERNAL,
         endorse_named=endorse,
+        argument_provenance=arguments,
+        content_args=CONTENT_ARGS,
+        target_args=TARGET_ARGS,
+        endorse_targets=endorse_targets,
     )
 
 
@@ -218,13 +251,14 @@ class TekmorExecutor(BasePipelineElement):
     ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
         if not messages or messages[-1]["role"] != "assistant":
             return query, runtime, env, messages, extra_args
+        # The request is the prompt the pipeline was started with. It is known only here.
+        self.taint.request = self.taint.request or query
         results = []
         for call in messages[-1]["tool_calls"] or ():
             action = Action(call.function, dict(call.args))
             state = AgentState(task=query, step=len(self.decisions))
-            decision = mediate(
-                self.defense, state, action, ActionProvenance.of(self.taint.sources), self.policy
-            )
+            provenance = ActionProvenance.of(self.taint.sources, self.taint.origins(action.args))
+            decision = mediate(self.defense, state, action, provenance, self.policy)
             self.decisions.append(decision)
             allowed = permitted(action, decision)
             if allowed is None:
@@ -234,10 +268,12 @@ class TekmorExecutor(BasePipelineElement):
                 output = tool_result_to_str(result)
                 self.executed.append(FunctionCall(function=allowed.tool, args=dict(allowed.args)))
                 if error is None:
+                    # Before the call's own result: the write carries what drove it.
+                    self.taint.wrote(allowed.args, self.policy.content_args)
                     source = label(self.suite, allowed.tool)
                     if self.policy.endorse_named:
                         source = endorse(source, allowed.args, query)
-                    self.taint.observe(source)
+                    self.taint.observe(source, output)
             results.append(
                 ChatToolResultMessage(
                     role="tool",
@@ -328,7 +364,7 @@ def defenses() -> tuple[Defense, ...]:
 
 
 def run_pair(
-    suite_name, suite, defense, user_task, injection_task, attack, endorse=False
+    suite_name, suite, defense, user_task, injection_task, attack, endorse=False, **roles
 ) -> DojoRecord:
     """One run, scored by AgentDojo's own checks against the calls that *executed*.
 
@@ -339,7 +375,7 @@ def run_pair(
     the suite's own, pinned by `VERSION`.
     """
     tools = [tool.name for tool in suite.tools]
-    executor = TekmorExecutor(defense, suite_name, policy(suite_name, tools, endorse))
+    executor = TekmorExecutor(defense, suite_name, policy(suite_name, tools, endorse, **roles))
     injections = attack.attack(user_task, injection_task) if injection_task else {}
     environment = user_task.init_environment(suite.load_and_inject_default_environment(injections))
     pre_environment = environment.model_copy(deep=True)
@@ -369,6 +405,7 @@ def evaluate(
     limit: int | None = None,
     endorse: bool = False,
     build: Callable[[], Sequence[Defense]] = defenses,
+    **roles: bool,
 ) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
 
@@ -384,10 +421,21 @@ def evaluate(
         for defense in build():
             attack = load_attack("direct", suite, None)
             for user_task in users:
-                records.append(run_pair(name, suite, defense, user_task, None, attack, endorse))
+                records.append(
+                    run_pair(name, suite, defense, user_task, None, attack, endorse, **roles)
+                )
                 for injection_task in injections:
                     records.append(
-                        run_pair(name, suite, defense, user_task, injection_task, attack, endorse)
+                        run_pair(
+                            name,
+                            suite,
+                            defense,
+                            user_task,
+                            injection_task,
+                            attack,
+                            endorse,
+                            **roles,
+                        )
                     )
     return records
 
@@ -469,14 +517,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="endorse content the user named (Policy.endorse_named)",
     )
+    parser.add_argument(
+        "--arguments",
+        action="store_true",
+        help="judge Trusted-Action per argument (Policy.argument_provenance)",
+    )
+    parser.add_argument(
+        "--endorse-targets",
+        action="store_true",
+        help="let endorsement raise target arguments too (Policy.endorse_targets)",
+    )
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
 
-    records = evaluate(args.suites, args.limit, args.endorse)
+    records = evaluate(
+        args.suites,
+        args.limit,
+        args.endorse,
+        arguments=args.arguments,
+        endorse_targets=args.endorse_targets,
+    )
     rows = score(records)
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    tag = "agentdojo-endorsed" if args.endorse else "agentdojo"
+    tag = "-".join(
+        ["agentdojo"]
+        + ["arguments"] * args.arguments
+        + ["endorsed"] * args.endorse
+        + ["targets"] * args.endorse_targets
+    )
     raw = args.results / "raw" / f"{stamp}-{tag}"
     processed = args.results / "processed" / f"{stamp}-{tag}"
     raw.mkdir(parents=True, exist_ok=True)
@@ -502,6 +571,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "suites": args.suites,
                 "limit": args.limit,
                 "endorse_named": args.endorse,
+                "argument_provenance": args.arguments,
+                "endorse_targets": args.endorse_targets,
+                "content_args": sorted(CONTENT_ARGS),
+                "target_args": sorted(TARGET_ARGS),
                 "config": {
                     name: {"sensitive": sorted(c.sensitive), "trusted": sorted(c.trusted)}
                     for name, c in SUITES.items()
