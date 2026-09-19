@@ -139,3 +139,23 @@ Nothing is integrated into `src/`. Two things would have to change before revivi
    on this proxy would not have counted.
 
 **Negative result recorded, not dropped** (`research/CLAUDE.md`).
+                                                                                                                                                                                        
+
+## Amendment 2 (2026-09-19, before any Qwen3-8B result was seen)
+
+A rerun on the reference model, the second revival condition above. Only the model
+changes. The recipe, data, templates, split, seeds, layer selection, held-out sets and
+gate are the ones above, and the verdict is read against the same gate.
+
+- **Model.** `Qwen/Qwen3-8B` on a Colab T4 (`notebooks/colab_qwen3_8b.ipynb`), loaded
+  **4-bit NF4 with float16 compute** (bitsandbytes), because the bf16 weights do not fit
+  in 15 GB. NF4 Qwen3-8B is not the full-precision reference model. It is the model an
+  agent on this hardware would run, so it meets limit 4 only for that deployment, and
+  the report records `quant` and `device` beside every number.
+- **Invocation.** `python -m research.experiments.drift_probe.probe --model Qwen/Qwen3-8B
+  --quant nf4`. Features are cached per model in `results/<model>[-<quant>]/`, so no
+  feature computed on one model is reused on another. The 0.6B run's cache moves to
+  `results/Qwen3-0.6B/`.
+- **What it can and cannot show.** The first revival condition, training on the target
+  register, is **not** addressed. If the result is the same failure, it cannot tell model
+  size apart from training register as the cause. Only a pass is informative on its own.
