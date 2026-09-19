@@ -1051,3 +1051,59 @@ every document rewrite is a no-op for every defense here; what these variants pr
 argument channel. `reword` is lexical substitution, not paraphrase. Flat ASR under a fixed
 set of transforms is not robustness to an adaptive attacker, which searches the transform
 space against observed decisions and is the next Phase 4 step.
+
+## Ablations: provenance carries the monitor, propagation carries its integrity half, and the matrix cannot see the rewrite
+
+**Context.** Phase 4 asks for ablations — no provenance, no trust propagation, no rewrite,
+rules only, full system — because the difference between two rows of one matrix is the
+only honest claim that a mechanism contributes anything.
+
+**Decided. `evaluation/ablations.py` removes an *input*, never a line of code.** `Ablation`
+wraps the unchanged `ReferenceMonitor` and changes only what it is handed:
+`no-provenance` shows it the user's request and nothing else; `no-propagation` shows it
+the user's request and the latest observation, so an influence counts only while it is
+the thing just read; `no-rewrite` empties the policy's capability lattice. Rules-only and
+full keep their harness names, `tekmor` and `tekmor+canary`. Deleting a branch from a copy
+of the monitor would have measured a second implementation, not an input.
+
+**What it measured** (`uv run python -m evaluation.ablations`, same 24 scenarios, scripted
+adapter, denying approver):
+
+```
+defense                    BTU     ASR     CVR     FBR     UER
+tekmor-no-provenance      1.00    0.94    0.46    0.00     n/a
+tekmor-no-propagation     1.00    0.35    0.08    0.00     n/a
+tekmor-no-rewrite         1.00    0.06    0.08    0.00    0.00
+tekmor                    1.00    0.06    0.08    0.00    0.00
+tekmor+canary             1.00    0.00    0.04    0.00    0.00
+```
+
+- **Without provenance the monitor is least privilege and nothing more.** Sixteen of
+  seventeen attacks land. The one it holds, `financial-direct-execute`, calls a tool
+  nobody granted. Recall on the derived per-action labels falls from 0.94 to 0.06.
+- **Without propagation, five attacks land that the core stops**: the laundered memory
+  (`enterprise-memory-planted-session`), the compositional remittance, the injected
+  confirmation, the tampered vendor record and the SOC injected alert. They are the
+  attacks where the sensitive call is driven by *integrity*, a payment or a containment,
+  and the hostile read is not the last thing read. Proposal A predicted that memory
+  poisoning and compositional attacks would break. That held for one scenario of two in
+  each family. The survivors are exfiltrations ending `read_secret → send`, which
+  Permitted-Flow holds on the latest read alone. So the ablation separates the two rules:
+  confidentiality needs no history here, and integrity does.
+- **Without rewrite, nothing the matrix scores moves.** All three downgrades become
+  escalations (six becomes nine) that the simulated human denies. BTU, ASR and FBR are
+  identical, because the downgrades all happen on attack runs and an attack scenario
+  states no utility condition. That is a **negative result about the matrix, not a
+  finding that rewrite is worthless**: the value the doc claims for REWRITE (the drafted
+  mail, the opened ticket) is utility on runs that were attacked, and nothing here
+  measures it. Measuring it needs attack scenarios to state what legitimate work should
+  still complete. That change is not made here, because it versions the scenarios.
+
+**Rejected.** Monitor variants with branches deleted (see above). Exact recency for
+`no-propagation`: the tracker deduplicates, so an agent that re-reads an earlier document
+is labelled by its last *first* read. That limit is marked in the code, and no scripted
+scenario re-reads. Adding utility conditions to attack scenarios in the same change as the
+ablation that motivated them.
+
+**Not claimed.** Ablations over one scripted matrix show which input each verdict depended
+on, for these paths. They do not show how an agent that reacts to a block would behave.
