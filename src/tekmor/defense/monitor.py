@@ -96,6 +96,8 @@ class ReferenceMonitor:
 
         if not signals.integrity_sufficient:
             violation = ("TARGET_TOOL_SENSITIVE", "ACTION_INTEGRITY_BELOW_THRESHOLD")
+            if signals.argument_integrity is not None:
+                violation += ("AUTHORITY_ARGUMENTS",)
             if signals.downgrade is None:
                 return Decision(
                     Verdict.ESCALATE, (*violation, "NO_CAPABILITY_DOWNGRADE"), risk=risk
@@ -110,8 +112,7 @@ class ReferenceMonitor:
                 risk=risk,
             )
 
-        return Decision(
-            Verdict.ALLOW,
-            ("TOOL_PERMITTED", "PERMITTED_FLOW_SATISFIED", "TRUSTED_ACTION_SATISFIED"),
-            risk=risk,
-        )
+        allowed = ("TOOL_PERMITTED", "PERMITTED_FLOW_SATISFIED", "TRUSTED_ACTION_SATISFIED")
+        if signals.argument_integrity is not None:
+            allowed += ("AUTHORITY_ARGUMENTS",)
+        return Decision(Verdict.ALLOW, allowed, risk=risk)

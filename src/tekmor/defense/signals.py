@@ -48,7 +48,11 @@ class Signals:
     tool_sensitive: bool
     tool_outbound: bool
     integrity: TrustLevel
-    #: Trusted-Action: may inputs of this integrity drive this tool?
+    #: The integrity of the authority-bearing arguments, when the policy judges
+    #: Trusted-Action per argument (`Policy.argument_provenance`), else None.
+    argument_integrity: TrustLevel | None
+    #: Trusted-Action: may inputs of this integrity drive this tool? Judged on
+    #: `argument_integrity` when there is one, else on `integrity`.
     integrity_sufficient: bool
     confidential_influence: bool
     #: Permitted-Flow: may what influenced this action leave through this call?
@@ -86,17 +90,46 @@ def extract(
     """
     confidential = provenance.confidential
     integrity = provenance.integrity
+    arguments = argument_integrity(action, provenance, policy)
     return Signals(
         tool=action.tool,
         tool_permitted=permitted_tool(action.tool, policy),
         tool_sensitive=action.tool in policy.sensitive_tools,
         tool_outbound=action.tool in policy.outbound_tools,
         integrity=integrity,
-        integrity_sufficient=trusted_action(action.tool, integrity, policy),
+        argument_integrity=arguments,
+        integrity_sufficient=trusted_action(
+            action.tool, integrity if arguments is None else arguments, policy
+        ),
         confidential_influence=confidential,
         flow_permitted=permitted_flow(
             action.tool, confidential, recipients_of(action.args, policy), policy
         ),
         downgrade=downgrade_for(action.tool, policy),
         min_integrity=policy.min_integrity,
+    )
+
+
+def argument_integrity(
+    action: Action, provenance: ActionProvenance, policy: Policy
+) -> TrustLevel | None:
+    """Argument-level Trusted-Action's input: the weakest authority-bearing argument.
+
+    Content arguments (`Policy.content_args`) are payload and are not judged: untrusted
+    text may fill a mail body. Every other argument is authority-bearing unless a
+    policy says otherwise, which is the conservative default for an argument nobody
+    classified. Endorsement raises no `target_args` unless `endorse_targets` is set. A
+    call with no authority-bearing argument is judged at call level.
+    """
+    if not policy.argument_provenance:
+        return None
+    return min(
+        (
+            provenance.argument_integrity(
+                name, endorsed=policy.endorse_targets or name not in policy.target_args
+            )
+            for name in action.args
+            if name not in policy.content_args
+        ),
+        default=provenance.integrity,
     )

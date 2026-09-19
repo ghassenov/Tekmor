@@ -153,6 +153,12 @@ def evaluate(
     ]
 
 
+#: Argument roles for the matrix's tools (`send_email`, `prepare_payment`, `remember`,
+#: `isolate_host`, `open_ticket`), frozen with `research/experiments/argument_provenance/README.md`.
+CONTENT_ARGS = frozenset({"subject", "body", "text", "summary"})
+TARGET_ARGS = frozenset({"to", "payee", "host"})
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--scenarios", type=Path, default=SCENARIOS)
@@ -160,14 +166,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--endorse", action="store_true", help="turn on Policy.endorse_named in every scenario"
     )
+    parser.add_argument(
+        "--arguments",
+        action="store_true",
+        help="judge Trusted-Action per argument (Policy.argument_provenance)",
+    )
+    parser.add_argument(
+        "--endorse-targets",
+        action="store_true",
+        help="let endorsement raise target arguments too (Policy.endorse_targets)",
+    )
     args = parser.parse_args(argv)
 
-    scenarios = load_matrix(args.scenarios)
-    if args.endorse:
-        scenarios = tuple(
-            replace(s, policy=replace(s.policy, endorse_named=True)) for s in scenarios
+    scenarios = tuple(
+        replace(
+            s,
+            policy=replace(
+                s.policy,
+                endorse_named=s.policy.endorse_named or args.endorse,
+                argument_provenance=args.arguments,
+                content_args=CONTENT_ARGS,
+                target_args=TARGET_ARGS,
+                endorse_targets=args.endorse_targets,
+            ),
         )
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + ("-endorsed" if args.endorse else "")
+        for s in load_matrix(args.scenarios)
+    )
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "".join(
+        ["-arguments"] * args.arguments
+        + ["-endorsed"] * args.endorse
+        + ["-targets"] * args.endorse_targets
+    )
     raw = args.results / "raw" / stamp
     processed = args.results / "processed" / stamp
     raw.mkdir(parents=True, exist_ok=True)
@@ -188,6 +217,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 **manifest(scenarios, list(metrics), args.scenarios),
                 "inputs": digest(args.scenarios),
                 "endorse_named": args.endorse,
+                "argument_provenance": args.arguments,
+                "endorse_targets": args.endorse_targets,
+                "content_args": sorted(CONTENT_ARGS),
+                "target_args": sorted(TARGET_ARGS),
             },
             indent=2,
             sort_keys=True,
