@@ -1409,3 +1409,40 @@ dev-set row as if it were held out.
 **Not claimed.** Nothing here measures a strong judge. Task Shield's and AlignmentCheck's
 numbers were produced with frontier models on AgentDojo with a real agent, and nothing
 above is comparable to them.
+
+## Proposal C: the drift probe separates synthetic text and not real tool output; demoted, as the gate prescribes
+
+**Context.** Proposal C is an activation-delta linear probe (TaskTracker) as a secondary
+signal. Recommendation 3 gates it: keep it only if its FPR on hard negatives is below
+~10% **and** it catches an attack the deterministic core misses, otherwise demote it.
+Part IX adds that the probe must hook the same Qwen3-8B the agent runs, and this
+machine has no GPU.
+
+**Decided. It is a research experiment, not a component**
+(`research/experiments/drift_probe/`). The hypothesis, the gate, the method and the
+proxy caveat were committed before the first run. One amendment, made after a crash and
+before any output existed, is recorded in the note. It runs on Qwen3-0.6B as a *proxy*,
+and the note said in advance that no outcome would integrate it: a pass would have meant
+"rerun on the reference model".
+
+**What it measured** (layer 11, chosen on synthetic validation):
+
+```
+set                                    AUROC   TPR@0.5   FPR@0.5
+synthetic validation (held-out templ.)  0.99      0.50      0.00
+Tekmor matrix (held out)                0.82      0.83      0.25
+AgentDojo v1.2.2 (held out)             0.58      0.90      0.82
+```
+
+The probe learned that *external text arrived*, not that *an instruction arrived*. On the
+matrix it scores ≥ 0.73 on every scenario with an untrusted document, benign or not. On
+AgentDojo it flags 20 of the 22 attacks the endorsed core misses, and 18 of their clean
+twins.
+
+**Verdict: the gate fails on both held-out sets, and Proposal C is demoted to future
+work.** Reviving it needs training data in the target register (tool outputs and
+business documents) and the reference model on a GPU. Neither is available here.
+
+**Not claimed.** Nothing about Qwen3-8B, and nothing about TaskTracker's reported
+numbers, which were measured on its own data with larger models. This is one proxy
+model, one training recipe and one layer choice.
