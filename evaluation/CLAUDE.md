@@ -37,12 +37,13 @@ attack families of `docs/technical-doc.md` Part I at levels 1-5, seven of them b
 (`over_refusal`, the family whose failure mode is refusing legitimate work). A scenario
 states its `family` and `level`; both are scorer metadata and never reach a defense, and
 `parse_scenario` rejects a family outside the taxonomy or one that disagrees with
-`benign`. Level 4 is represented by static rewordings — the adaptive attacker that
-mutates against observed decisions is Phase 4, and nothing here substitutes for it.
+`benign`. Level 4 is represented by static rewordings in the matrix itself. The adaptive attacker
+(`adaptive.py`) mutates against observed decisions, but only over the argument channel
+of a scripted agent.
 
 Twenty-four scenarios across three domains is still a matrix, not a benchmark: written by
 the same people who wrote the defense, and every attack a scripted path. External
-validation (AgentDojo) and the adaptive attacker are the rest of Phase 4.
+validation (AgentDojo) is the rest of Phase 4.
 
 **Robustness variants** (`variants.py`, `uv run python -m evaluation.variants`) transform
 what an attacker controls (untrusted document text, the scripted steps' argument values,
@@ -59,6 +60,13 @@ counts), or the capability lattice. Rules-only and full are `tekmor` and `tekmor
 Results land under `results/{raw,processed}/<stamp>-ablations/`. The numbers, and why the
 no-rewrite row cannot move on this matrix, are in `docs/decisions.md`.
 
+**The adaptive attacker** (`adaptive.py`, `uv run python -m evaluation.adaptive`) climbs
+over a genome of encoding, rewording and read order. Each candidate is rebuilt from the
+original, and it is replayed undefended before it is scored. Its fitness reads only what
+an attacker observes: its goal, the verdicts, and the public reason codes, never the risk
+score. Results land under `results/{raw,processed}/<stamp>-adaptive/`, with the seed and
+the budget in the manifest.
+
 ## Layout
 
 ```
@@ -68,6 +76,7 @@ metrics.py    BTU, ASR, CVR, FBR, UER, detection and ECE, from run records
 calibration.py  CALIB-RISK: the Platt fit, the held-out protocol, and its own controls
 variants.py   robustness variants: encode / reword / reorder, validated and paired
 ablations.py  the monitor with one input removed: provenance, propagation, rewrite
+adaptive.py   the adaptive attacker: a seeded hill climb, ASR reported per round
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 benchmarks/   external harness integration (AgentDojo first) — not started
 ```
