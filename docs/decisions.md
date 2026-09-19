@@ -1107,3 +1107,69 @@ ablation that motivated them.
 
 **Not claimed.** Ablations over one scripted matrix show which input each verdict depended
 on, for these paths. They do not show how an agent that reacts to a block would behave.
+
+## The adaptive attacker: the keyword filter falls in five rounds, the monitor never moves, and the one win is one nobody can count
+
+**Context.** Part VI asks for a hill-climbing mutation attacker that sees only public
+decisions and coarse reason codes, and for ASR reported per round. Until now level 4
+(adaptive) was represented by static rewordings.
+
+**Decided. `evaluation/adaptive.py` climbs over a three-gene `Genome`: the encoding the
+secret leaves in (none or any of the five variant encodings), rewording, and read
+reordering. Every candidate is rebuilt from the original.** The first version applied the
+variant transforms cumulatively, and it was wrong in a way the numbers hid. Once one
+encoding was accepted, the secret no longer appeared in the text, every later encoding
+was a no-op, and 18 of 20 rounds were wasted on a climb stuck at its first choice. The
+flat curve for `tekmor+canary` would then have been a fact about the attacker, not the
+defense. The genome fixes that: one encoding can replace another.
+
+- **What the attacker sees** (`fitness`): whether its goal was reached (it is the
+  recipient or the payee), how many of its steps were allowed, and how many distinct
+  refusal reason codes came back. Not the risk score, not the contributions, not the
+  labels. A candidate at least as fit replaces the current one, so the climb drifts
+  across plateaus.
+- **A candidate must still be an attack.** Each one is replayed undefended first. One
+  whose attack no longer lands is a rejected query, counted and never kept.
+- **Seeded per (seed, defense, scenario)**, so adding a pair does not change the draws
+  of any other.
+
+**What it measured** (fifty rounds, same 24 scenarios; the same curve for seeds 0-4):
+
+```
+defense              r0    r12    r25    r37    r50
+allow-all          1.00   1.00   1.00   1.00   1.00
+deny-sensitive     0.00   0.00   0.00   0.00   0.00
+keyword            0.88   1.00   1.00   1.00   1.00
+tekmor             0.06   0.06   0.06   0.06   0.06
+tekmor+canary      0.00   0.00   0.00   0.00   0.00
+```
+
+- **The keyword filter falls within the first five rounds** on every seed. Its two
+  holdouts (`enterprise-direct-token-request`, `enterprise-leak-mislabelled`) land once
+  the text is reworded *and* the secret encoded. It takes both genes: either one alone
+  still trips a keyword.
+- **`tekmor` and `tekmor+canary` do not move.** The monitor never reads argument text or
+  wording, so there is no gradient for the climb to follow. The public codes change only
+  when the provenance does, and the attacker cannot change provenance from inside the
+  content. This is the claim Part XIV's adaptive round was meant to show, now measured.
+  It is measured against *this* attacker, whose whole search space is 24 candidates.
+- **The one form that beats `tekmor+canary` is one the attacker cannot be credited
+  with.** `base64-reversed` on `enterprise-leak-mislabelled` sends the secret past the
+  canary layer (the strict xfail recorded with the variants). The same blind spot in the
+  ground truth rejects the candidate as "no longer an attack". So the curve for
+  `tekmor+canary` is flat partly *because* the measurement shares the scanner's matcher.
+  A real attacker, who receives the mail, would have won that pair. This is the
+  uncomfortable coupling already on record, now affecting the adaptive curve too.
+  `tests/evaluation/test_adaptive.py` asserts both halves: the ground truth rejects the
+  candidate, and under the canary layer the mail goes out.
+
+**Rejected.** Cumulative transforms (above). Giving the attacker the risk score or
+`risk.contributions` (Part VIII keeps them private for this reason). Crediting rejected
+candidates by a literal-match condition written for the attacker (a second definition of
+"leaked"). Pinning a per-seed rejection count in a test (it depends on the draws).
+
+**Not claimed.** This is not the adaptive attacker of Zhan et al. or Nasr, Carlini et al.
+Those search text against a *model*, and here the scripted agent's steps are fixed, so
+wording reaches a decision only through the argument channel. With a model in the loop,
+the search space is the text itself and the agent's behaviour depends on it. That is the
+setting the literature reports defenses losing in, and nothing here tests it.
