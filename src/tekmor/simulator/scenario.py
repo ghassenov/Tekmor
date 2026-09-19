@@ -20,6 +20,14 @@ score is a run that produces a number nobody can defend. Each is a list of condi
 maps: within a map every `dotted.path: value` must hold, and the scenario counts if any
 map does, because an injection that asks for two things succeeds by getting either.
 
+**Family and level** place the scenario in the test matrix of `docs/technical-doc.md`
+Part VI: one of the seven attack families of Part I, and difficulty 1-5 (local,
+contextual, compositional, adaptive, long-horizon). They are scorer metadata like `id`
+and `benign` — the grid is reported by them — and like those they never reach a defense.
+`over_refusal` is the benign family: its failure mode is refusing legitimate work rather
+than permitting an attack, so `benign` and that family are the same claim and the parser
+rejects a scenario that states one without the other.
+
 Trust is declared on the *documents*, never on the steps. What influenced an action is
 computed from what the agent read (`tekmor.provenance.taint`), so a scenario states
 where its content came from and the run works out the rest. A scenario that could label
@@ -39,6 +47,27 @@ from tekmor.policy.core import Policy
 from tekmor.provenance.trust import TrustLevel
 from tekmor.simulator.domains import DOMAINS
 from tekmor.simulator.world import Document, World
+
+#: The attack families of `docs/technical-doc.md` Part I, which are the rows of the
+#: evaluation grid. Fixed rather than free text: a typo in a family name would silently
+#: create a row of its own and split the family it was meant to join.
+FAMILIES = frozenset(
+    {
+        "direct_instruction",
+        "indirect_injection",
+        "compositional",
+        "memory_poisoning",
+        "tool_output_tampering",
+        "exfiltration",
+        "over_refusal",
+    }
+)
+
+#: Difficulty 1-5: local, contextual, compositional, adaptive, long-horizon.
+LEVELS = frozenset(range(1, 6))
+
+#: The one family that is benign work. See the module docstring.
+BENIGN_FAMILY = "over_refusal"
 
 
 class ScenarioError(ValueError):
@@ -110,6 +139,9 @@ class Scenario:
     domain: str
     task: str
     benign: bool
+    #: Where this scenario sits in the matrix (`FAMILIES`, `LEVELS`). Scorer metadata.
+    family: str
+    level: int
     policy: Policy
     documents: Mapping[str, Document]
     canaries: Mapping[str, str]
@@ -259,12 +291,26 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         raise ScenarioError(f"policy names {sorted(named - tools)}, not tools of domain {domain!r}")
 
     benign = _require(data, "benign", bool)
+    family = _require(data, "family", str)
+    if family not in FAMILIES:
+        raise ScenarioError(f"unknown family {family!r}; have {sorted(FAMILIES)}")
+    if benign != (family == BENIGN_FAMILY):
+        raise ScenarioError(
+            f"{BENIGN_FAMILY!r} is the benign family, so benign={benign!r} cannot state "
+            f"family {family!r}: the grid row and the ground truth would disagree"
+        )
+    level = _require(data, "level", int)
+    if level not in LEVELS:
+        raise ScenarioError(f"level {level!r} is not one of {sorted(LEVELS)}")
+
     return Scenario(
         id=_require(data, "id", str),
         version=_require(data, "version", int),
         domain=domain,
         task=_require(data, "task", str),
         benign=benign,
+        family=family,
+        level=level,
         policy=policy,
         documents={
             name: _document(name, value) for name, value in data.get("documents", {}).items()

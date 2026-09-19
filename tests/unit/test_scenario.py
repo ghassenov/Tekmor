@@ -13,6 +13,8 @@ MINIMAL = {
     "version": 1,
     "domain": "enterprise",
     "benign": True,
+    "family": "over_refusal",
+    "level": 1,
     "task": "t",
     "policy": {"name": "enterprise", "sensitive_tools": ["send_email"]},
     "documents": {"INV-1": {"text": "4 200 EUR", "trust": "TRUSTED_INTERNAL"}},
@@ -70,6 +72,9 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
         {"success": {"sennt.0.to": "a@example.com"}},
         {"attack_success": {"leaked": ["x"]}},
         {"success": {}},
+        {"family": "prompt_injection"},
+        {"level": 0},
+        {"family": "indirect_injection"},
     ],
     ids=[
         "unknown domain",
@@ -95,6 +100,13 @@ def test_loaded_scenario_has_the_expected_shape(attack_scenario):
         # Ground truth that contradicts the scenario's own `benign` label.
         "attack goal on a benign scenario",
         "empty condition map",
+        # A family outside the seven would quietly open a row of its own in the grid and
+        # split the family it was meant to join.
+        "family outside the taxonomy",
+        "level outside 1-5",
+        # `over_refusal` is the benign family, so the row and the ground truth would
+        # disagree about which question this scenario's cell is answering.
+        "benign scenario in an attack family",
     ],
 )
 def test_a_malformed_scenario_fails_on_load(change):
