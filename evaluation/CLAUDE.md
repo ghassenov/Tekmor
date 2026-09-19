@@ -42,7 +42,16 @@ mutates against observed decisions is Phase 4, and nothing here substitutes for 
 
 Twenty-four scenarios across three domains is still a matrix, not a benchmark: written by
 the same people who wrote the defense, and every attack a scripted path. External
-validation (AgentDojo), robustness variants and the adaptive attacker are Phase 4.
+validation (AgentDojo) and the adaptive attacker are the rest of Phase 4.
+
+**Robustness variants** (`variants.py`, `uv run python -m evaluation.variants`) transform
+what an attacker controls (untrusted document text, the scripted steps' argument values,
+the order of consecutive reads) and rewrite the outcome conditions to match. Each variant
+is replayed under `AllowAll` first and *rejected and listed* if its attack no longer lands
+or its benign task no longer completes. Variants are reported paired with their originals
+(ASR/BTU original > variant, and the runs that flipped) and never mixed into the headline
+metrics. Results land under `results/{raw,processed}/<stamp>-variants/`. With the scripted
+adapter, document rewrites reach no decision; the variants probe the argument channel.
 
 ## Layout
 
@@ -51,6 +60,7 @@ scenarios/    versioned scenario definitions, JSON or YAML (see docs/decisions.m
 harness.py    run the matrix: scenarios x defenses -> raw records + manifest
 metrics.py    BTU, ASR, CVR, FBR, UER, detection and ECE, from run records
 calibration.py  CALIB-RISK: the Platt fit, the held-out protocol, and its own controls
+variants.py   robustness variants: encode / reword / reorder, validated and paired
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 benchmarks/   external harness integration (AgentDojo first) — not started
 ```
