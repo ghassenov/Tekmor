@@ -86,6 +86,7 @@ ablations.py  the monitor with one input removed: provenance, propagation, rewri
 adaptive.py   the adaptive attacker: a seeded hill climb, ASR reported per round
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
 dojo.py       AgentDojo: Tekmor as a pipeline element, ground truth as a fooled agent
+alignment.py  Proposal B: the monitor with and without the task-alignment auditor
 ```
 
 `harness.py`, `metrics.py` and `calibration.py` are single modules rather than the

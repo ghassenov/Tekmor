@@ -20,7 +20,10 @@ decision event and append-only JSONL log in `observability/events.py` and the ti
 provenance-graph viewer in `observability/viewer.py`; the enterprise,
 financial and SOC worlds, typed tools, canary tagging and the JSON/YAML scenario format
 in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the Qwen3-8B adapter,
-the run loop and the `ToolGateway` in `runtime/`.
+the run loop and the `ToolGateway` in `runtime/`; the endorsement primitive
+(`provenance/taint.py`, opt-in per policy) and Proposal B's `AlignmentAuditor`
+(`defense/auditor.py`) with a local-LM judge (`runtime/qwen.py`), built and measured
+and not adopted (`docs/decisions.md`).
 
 **Not implemented:** argument redaction as a rewrite, and selective escalation — the
 deferral half of CALIB-RISK, which would give the score authority over a verdict and is
