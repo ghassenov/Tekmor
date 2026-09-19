@@ -1551,3 +1551,75 @@ sets).
 **Not claimed.** Full-precision Qwen3-8B, other layers' held-out behaviour (layer choice
 stays on synthetic validation, as pre-registered), or anything about TaskTracker's own
 numbers.
+
+## Argument-level provenance: it buys utility, and it turns a labelling error into an authorization
+
+**Context.** AgentDojo's call-level result is this project's worst number: `tekmor` equals
+`deny-sensitive` on three suites of four, pooled BTU 0.45, and endorsement buys BTU 0.69
+only by paying ASR 0.04 → 0.15. The 2026 literature answers with argument granularity —
+PACT (arXiv:2605.11039), AuthGraph (arXiv:2605.26497), on the line FIDES and CaMeL
+started — where what matters is whether untrusted content *determined an
+authority-bearing argument*. Pre-registered, with hypotheses, arms, role map and
+predictions, in `research/experiments/argument_provenance/README.md` and committed before
+the first run.
+
+**Decided. The mechanism is implemented in `src/` and stays off by default.**
+`TaintTracker.origins` traces each argument value verbatim to the observations that
+contain it; `Policy.argument_provenance` judges Trusted-Action on the authority-bearing
+arguments instead of the whole call; `content_args` are exempt as payload; `target_args`
+are never raised by an endorsement unless `endorse_targets` says so; and payload the agent
+writes is capped so a naive store cannot launder it back as trusted. An untraced value
+falls back to the call-level rule, so tracing only ever narrows which influences count.
+Event schema 4 records each argument's origins by source id, never by value.
+
+**What it measured** (AgentDojo v1.2.2, frozen configuration, 97 benign runs and 583 valid
+pairs per arm; the matrix unchanged in all five arms):
+
+```
+arm                           BTU          ASR           UA
+tekmor                   44/97 = 0.45  21/583 = 0.04    0.46
+tekmor+endorse           67/97 = 0.69  85/583 = 0.15    0.66
+A  arguments             53/97 = 0.55  42/583 = 0.07    0.54
+B  arguments+endorse-all 74/97 = 0.76 184/583 = 0.32    0.67
+C  arguments+endorse     66/97 = 0.68  64/583 = 0.11    0.67
+```
+
+- **The primary hypothesis is refuted.** Arm C had to reach BTU ≥ 0.69 *and* ASR ≤ 0.04.
+  It reaches 0.68 and 0.11. Argument level alone (A) is refuted too: it buys ten points of
+  BTU and costs three of ASR. Both are trades, and the gate asked for a dominance.
+- **Role scoping is confirmed to matter.** Letting an endorsement raise destinations (B)
+  triples ASR, 0.11 → 0.32, for eight points of utility. That is the one hypothesis the
+  run supports.
+- **The mechanism's own failure mode is the finding.** 20 of arm A's 21 new landings are
+  slack injections whose URL the attacker placed in the **channel list**, which the frozen
+  configuration labels `trusted`. Call-level taint took the meet over everything read, so
+  any untrusted read masked that wrong label; argument-level tracing lets the mislabelled
+  source *vouch* for the attacker's URL. **Under argument granularity, every `trusted`
+  label must be right, because there is no meet to hide a wrong one.** That is a worse
+  failure mode than over-tainting, and it is why this stays off.
+- The other two causes are separate: the travel landing is a content-channel attack (the
+  recipient is the user's own, the payload is the secret; nothing on AgentDojo is labelled
+  confidential, so Permitted-Flow is not armed), and arm C's workspace landings are
+  authority values too short to trace (`file_id: '13'`) falling back to call level, where
+  the endorsement raises them.
+- **A pre-registered prediction was wrong, and the reason is structural.** The matrix's
+  endorsed-invoice pair was predicted to flip under C. It does not move: the payee is bound
+  at `prepare_payment`, which that policy does not call sensitive, and the sensitive steps
+  carry only the handle `PAY-1`. An authority value laundered through world state is
+  invisible to a rule that reads only the arguments of the call in front of it — the same
+  shape as the canary scanner's recorded blind spot. PACT reports that roles *and*
+  cross-step provenance are both needed; this is that ablation from the other side.
+
+**Verdict: built and measured, not adopted.** `argument_provenance` stays off. The next
+arm is field-level labels inside one observation (a channel list is trusted for its
+structure, not for the names third parties chose) and provenance for handles.
+
+**Rejected.** Editing `SUITES` so `get_channels` is untrusted. It would fix 20 of the 21
+new landings, and it would be a configuration tuned on held-out results, which stops
+AgentDojo being held out. Lowering `MIN_NAME` to trace `'13'`: a two-character value
+matches anywhere, and a trace that matches anywhere vouches for anything.
+
+**Not claimed.** Nothing about a model-driven agent. The driver replays ground truth and
+obeys every injection, so ASR is the always-obeys bound, and provenance is near-oracle
+because values are copied verbatim. None of these numbers is comparable with PACT's,
+AuthGraph's, CaMeL's or FIDES's.
