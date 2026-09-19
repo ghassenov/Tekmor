@@ -38,9 +38,9 @@ and Platt-scales that score leave-one-scenario-out to measure whether its magnit
 probabilities. It also reports the pass/fail grid by attack family and difficulty level.
 `docs/decisions.md` records each measurement and its limits. Twenty-four scenarios in
 three domains, covering the seven attack families at levels 1-5, is a matrix, not a
-benchmark: the external validation (AgentDojo), the generated robustness variants and the
-adaptive attacker are still ahead, and level 4 is represented by static rewordings until
-that attacker exists.
+benchmark: the robustness variants, ablations, adaptive attacker and AgentDojo run live in
+`evaluation/`. On AgentDojo, call-level taint costs benign utility down to the
+`deny-sensitive` baseline on three suites of four (`docs/decisions.md`).
 
 A scenario states its own ground truth (`success` / `attack_success`: conditions over
 world state) and its place in the matrix (`family`, `level`), and all of it, like `id`
