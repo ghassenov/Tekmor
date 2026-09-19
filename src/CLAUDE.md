@@ -16,20 +16,25 @@ extraction in `defense/signals.py` and the risk score, its severities and its ba
 least-privilege rules in `policy/core.py`; the trust lattice, `Source`, its confidentiality label and the
 `TaintTracker` in `provenance/`; the encoding-aware canary matcher in
 `provenance/canary.py` and the `CanaryScanner` layer over it in `defense/canary.py`; the
-decision event and append-only JSONL log in `observability/events.py`; the enterprise,
+decision event and append-only JSONL log in `observability/events.py` and the timeline /
+provenance-graph viewer in `observability/viewer.py`; the enterprise,
 financial and SOC worlds, typed tools, canary tagging and the JSON/YAML scenario format
 in `simulator/`; the `ModelAdapter` protocol, the scripted mock, the Qwen3-8B adapter,
 the run loop and the `ToolGateway` in `runtime/`.
 
-**Not implemented:** argument redaction as a rewrite, the timeline and provenance-graph
-viewer, and any *calibration* of the risk score — the severities in `defense/risk.py` are
-ordinal and hand-ordered, and Platt-scaling them against held-out runs (CALIB-RISK) is
-not done. ECE is measured and reported, not achieved.
+**Not implemented:** argument redaction as a rewrite, and selective escalation — the
+deferral half of CALIB-RISK, which would give the score authority over a verdict and is
+declined in `docs/decisions.md`. The severities in `defense/risk.py` are still ordinal:
+Platt-scaling them against held-out scenarios is now implemented and *measured*
+(`evaluation/calibration.py`), and on this matrix it makes ECE worse, so the scale in use
+remains the hand-ordered one. ECE is measured and reported, not achieved.
 
 **Evaluated, on this repository's own matrix.** `evaluation/harness.py` runs every
 scenario under every defense and scores BTU, ASR, CVR, FBR and UER from world state,
-plus precision/recall/F1 over per-action labels and AUROC/ECE over the risk score;
-`docs/decisions.md` records the first measurement and its limits. Seven scenarios in
+plus precision/recall/F1 over per-action labels and AUROC/AUPRC/ECE over the risk score,
+and Platt-scales that score leave-one-scenario-out to measure whether its magnitudes are
+probabilities (they are not; the fit is worse than the ordinal scale on seven scenarios).
+`docs/decisions.md` records each measurement and its limits. Seven scenarios in
 three domains is a matrix, not a benchmark, and the external validation (AgentDojo),
 the robustness variants and the adaptive attacker are still ahead.
 
@@ -80,7 +85,7 @@ upgrade, and they are not implemented.
 | `defense/` | `Defense` interface, signal extraction, risk scoring, decision + rewrite |
 | `provenance/` | trust lattice, taint propagation through memory and tool-output fields |
 | `policy/` | declarative per-domain policies and their deterministic evaluation |
-| `observability/` | event schema, append-only JSONL log, trace and provenance graph |
+| `observability/` | event schema, append-only JSONL log, timeline and provenance graph |
 | `simulator/` | synthetic world, typed tools, canary-tagged secrets, scenario format |
 | `runtime/` | `ModelAdapter` (mock + Qwen3-8B), runner, tool gateway |
 

@@ -39,11 +39,13 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from evaluation.calibration import by_defense as calibrate_by_defense
+from evaluation.calibration import table as calibration_table
 from evaluation.metrics import RunRecord, by_defense, calibration, record, table
 from tekmor import __version__
 from tekmor.defense import CanaryScanner, Defense, ReferenceMonitor
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
-from tekmor.observability import EventLog
+from tekmor.observability import EventLog, read, render
 from tekmor.runtime import run
 from tekmor.simulator import load_scenario
 from tekmor.simulator.scenario import Scenario
@@ -156,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     log = EventLog(raw / "decisions.jsonl")
     records = evaluate(scenarios, log)
     metrics = by_defense(records)
+    calibrations = calibrate_by_defense(records)
 
     (raw / "runs.jsonl").write_text(
         "".join(json.dumps(item.as_dict(), sort_keys=True) + "\n" for item in records),
@@ -178,11 +181,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         + "\n",
         encoding="utf-8",
     )
+    # Processed, not raw: the calibrated numbers are derived from the same decision
+    # events by a fit that could change, and raw output is never rewritten.
+    (processed / "calibration.json").write_text(
+        json.dumps(
+            {name: c.as_dict() for name, c in calibrations.items()}, indent=2, sort_keys=True
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    # The trace as a page, beside the trace it was rendered from. It reads the JSONL and
+    # nothing else, so it is a view of the run rather than a second source of truth.
+    view = raw / "timeline.html"
+    view.write_text(render(read(log.path), title=f"Tekmor {stamp}"), encoding="utf-8")
 
     print(table(metrics))
     print()
     print(calibration(metrics))
+    print()
+    print(calibration_table(calibrations))
     print(f"\n{len(records)} runs -> {raw}\n            -> {processed / 'metrics.json'}")
+    print(f"            -> {processed / 'calibration.json'}\n            -> {view}")
     return 0
 
 

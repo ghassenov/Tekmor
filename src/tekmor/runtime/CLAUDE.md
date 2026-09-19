@@ -42,7 +42,10 @@ TEKMOR_QWEN_MODEL=Qwen/Qwen3-0.6B uv run pytest -m slow
   adapter that could read decisions would be able to probe the monitor for free.
 - **`AgentState` carries the task and the step index only.** Do not add scenario
   identifiers, expected outcomes, or anything else a defense could recognise.
-- Every decision is logged when a log is given, before the action executes.
+- Every decision is logged when a log is given, **after** the gateway has acted on it, so
+  one event carries the decision and what became of the action (`observability/events.py`,
+  and the reversal is recorded in `docs/decisions.md`). The runner computes that outcome
+  and nothing else about it: the log never sees the tool's result or its error message.
 - Tests use `ScriptedModel`. Anything needing a real backend is marked `slow`.
 - **An adapter proposes an action and nothing else.** Provenance is the runner's, read
   off the run's `TaintTracker` before the call and updated from the observation after
