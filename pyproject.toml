@@ -19,6 +19,9 @@ yaml = ["pyyaml>=6"]
 # The Qwen3-8B adapter (runtime/qwen.py). Transformers rather than a serving layer, so
 # residual-stream hooks stay reachable for Proposal C.
 qwen = ["transformers>=4.51", "torch>=2.4", "accelerate>=1.0"]
+# External validation on AgentDojo (evaluation/dojo.py). Evaluation-only: nothing under
+# src/ imports it.
+agentdojo = ["agentdojo>=0.1.35"]
 
 [dependency-groups]
 # pyyaml is here as well as in the extras so CI exercises the YAML front end; the qwen

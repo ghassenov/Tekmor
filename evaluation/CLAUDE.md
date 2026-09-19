@@ -43,7 +43,7 @@ of a scripted agent.
 
 Twenty-four scenarios across three domains is still a matrix, not a benchmark: written by
 the same people who wrote the defense, and every attack a scripted path. External
-validation (AgentDojo) is the rest of Phase 4.
+validation is `dojo.py`, on AgentDojo's own tasks and checks.
 
 **Robustness variants** (`variants.py`, `uv run python -m evaluation.variants`) transform
 what an attacker controls (untrusted document text, the scripted steps' argument values,
@@ -67,6 +67,13 @@ an attacker observes: its goal, the verdicts, and the public reason codes, never
 score. Results land under `results/{raw,processed}/<stamp>-adaptive/`, with the seed and
 the budget in the manifest.
 
+**AgentDojo** (`dojo.py`, needs `uv sync --extra agentdojo`) runs the pinned suites with
+Tekmor as a pipeline element. It scores with AgentDojo's own checks, against the calls
+that *executed*, and counts pairs whose attack does not land undefended as invalid. The
+per-suite `sensitive`/`trusted` configuration is deployment input, frozen: do not tune it
+on AgentDojo results, because AgentDojo is the held-out set. Results land under
+`results/{raw,processed}/<stamp>-agentdojo/`.
+
 ## Layout
 
 ```
@@ -78,7 +85,7 @@ variants.py   robustness variants: encode / reword / reorder, validated and pair
 ablations.py  the monitor with one input removed: provenance, propagation, rewrite
 adaptive.py   the adaptive attacker: a seeded hill climb, ASR reported per round
 results/      generated outputs, separated into raw/ and processed/ (gitignored)
-benchmarks/   external harness integration (AgentDojo first) — not started
+dojo.py       AgentDojo: Tekmor as a pipeline element, ground truth as a fooled agent
 ```
 
 `harness.py`, `metrics.py` and `calibration.py` are single modules rather than the

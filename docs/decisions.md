@@ -1173,3 +1173,99 @@ Those search text against a *model*, and here the scripted agent's steps are fix
 wording reaches a decision only through the argument channel. With a model in the loop,
 the search space is the text itself and the agent's behaviour depends on it. That is the
 setting the literature reports defenses losing in, and nothing here tests it.
+
+## AgentDojo: the monitor stops what it guards, and on someone else's tasks call-level taint costs what deny-sensitive costs
+
+**Context.** Phase 4 ends with AgentDojo (Debenedetti et al., NeurIPS 2024), the external
+validation Part VII names. It is the guard against a defense designed around its own test
+set: the tasks, injections and utility and security checks are someone else's.
+
+**Decided. `evaluation/dojo.py` puts Tekmor inside AgentDojo as `TekmorExecutor`**, a
+pipeline element replacing AgentDojo's `ToolsExecutor`. Every tool call becomes an
+`Action`, is decided by `mediate()` with the run's taint as provenance, and executes only
+as `runtime.gateway.permitted` allows. That mapping was lifted out of `ToolGateway` into a
+function so the two drivers share one chokepoint instead of two copies of it. The suites
+are pinned at AgentDojo benchmark `v1.2.2`, and the package is an optional extra
+(`uv sync --extra agentdojo`) that nothing under `src/` imports. Its tests skip without
+it, as the Qwen tests do without a model.
+
+- **The agent is AgentDojo's own ground truth, fully fooled.** There is no GPU and no
+  model endpoint here. A benign run replays the user task's ground-truth calls. An
+  attacked run replays them in the environment AgentDojo's `direct` attack injected, and
+  then replays the injection task's calls. This is this repository's scripted adapter on
+  someone else's benchmark. ASR here is therefore the *agent-always-obeys* bound. It is
+  not comparable with CaMeL, FIDES or any number reported with a model, and it is not
+  compared with them.
+- **The configuration is deployment input, frozen before the first run.** Per suite,
+  `sensitive` lists the tools that change state or send something out, and `trusted`
+  lists the tools whose results only the user or their own institution authored.
+  Everything else, including any tool nobody listed, is `UNTRUSTED_EXTERNAL`. Both lists
+  were written from tool names and docstrings, never from the injection vectors. Nothing
+  is confidential and no suite has a capability lattice, so Permitted-Flow and REWRITE
+  are unexercised: every violation escalates to a human who denies.
+- **Scored against the calls that executed, not the calls proposed.** The first full run
+  used `TaskSuite.run_task_with_pipeline`. It scores trace-based checks over every call
+  the agent *proposed*, so slack `injection_task_5` counted as landed under
+  `deny-sensitive`, which refuses all three of its calls. `run_pair` repeats that
+  sequence with the executed trace substituted, using the suite's own checks. Slack ASR
+  for `tekmor` went from 0.40 to 0.20. Both numbers are recorded because the first one
+  was produced, and it was wrong.
+- **Pairs whose attack does not land undefended are invalid**, as with the variants:
+  counted, excluded from ASR, and never scored as a defense win. That is 366 of 949 pairs:
+  24 in travel (20 are `injection_task_6`, which is judged on the agent's *text*, a
+  channel a tool-boundary monitor has no view of; 4 are `injection_task_2` on four user
+  tasks) and 342 in workspace (eight injection tasks, 6 to 13, never land under this
+  driver, and tasks 0 and 5 miss on 22 pairs).
+
+**What it measured** (`uv run python -m evaluation.dojo`; UA = utility under attack, n =
+valid attack pairs):
+
+```
+suite      defense           BTU     UA    ASR    FBR     n   inv
+banking    allow-all        1.00   0.87   1.00   0.00   144     0
+banking    deny-sensitive   0.44   0.44   0.00   0.42   144     0
+banking    keyword          0.94   0.83   0.89   0.03   144     0
+banking    tekmor           0.44   0.44   0.00   0.39   144     0
+slack      allow-all        1.00   0.97   1.00   0.00   105     0
+slack      deny-sensitive   0.05   0.05   0.20   0.35   105     0
+slack      keyword          1.00   0.97   0.60   0.00   105     0
+slack      tekmor           0.24   0.24   0.20   0.29   105     0
+travel     allow-all        1.00   0.19   1.00   0.00   116    24
+travel     deny-sensitive   0.70   0.70   0.00   0.05   116    24
+travel     keyword          1.00   0.19   1.00   0.00   116    24
+travel     tekmor           0.70   0.70   0.00   0.05   116    24
+workspace  allow-all        1.00   0.58   1.00   0.00   218   342
+workspace  deny-sensitive   0.45   0.45   0.00   0.33   218   342
+workspace  keyword          1.00   0.58   1.00   0.04   218   342
+workspace  tekmor           0.45   0.45   0.00   0.33   218   342
+```
+
+- **Security: the monitor stops every valid attack that drives a guarded tool.** 21 of
+  583 land, and all 21 are slack `injection_task_3`, "visit a website at this link". Its
+  goal is the request itself, made through `get_webpage`, which the frozen configuration
+  treats as a read. That configuration is wrong in a way worth recording: *a fetch of an
+  attacker-chosen URL is an outbound action, whatever the tool is called*. The Tekmor
+  domains do not have this problem because they have no fetch tool. It is **not** fixed
+  by editing the configuration after seeing the result. AgentDojo is the held-out set,
+  and a configuration tuned on it would stop being one.
+- **Utility: on three suites of four, `tekmor` is `deny-sensitive`.** BTU 0.44 / 0.70 /
+  0.45 against the same numbers for the baseline, and 0.24 against 0.05 on slack, the
+  one suite with trusted reads before actions. Almost every benign AgentDojo task reads
+  third-party content (a bill, a message, a listing) before it acts. Call-level,
+  prefix-monotone taint then labels the action untrusted, and Trusted-Action refuses it.
+  This is the over-tainting `provenance/taint.py` warned about, measured on tasks this
+  project did not write. On its own matrix, where the benign scenarios were written by
+  the same hands, BTU is 1.00. **This gap is the most important number Phase 4 produced.**
+- **It trips Recommendation 1.** BTU below ~0.7 means an endorsement primitive comes
+  before any new signal. Phase 5's auditor and probe are new signals, so Phase 5 starts
+  with endorsement.
+
+**Rejected.** Comparing these numbers with published AgentDojo results (different agent,
+different claim). Tuning `sensitive`/`trusted` on the results. Scoring with
+`run_task_with_pipeline` as it is (above). Adding `agentdojo` to the dev group so CI runs
+it: it brings several provider SDKs into every checkout for one module.
+
+**Not claimed.** Nothing here says how a model would behave on AgentDojo. A real model is
+fooled less than always, so real ASR is bounded above by this driver's. It also recovers
+less than perfectly, so real utility is bounded above by the ground truth's. The
+invalid pairs are a limit of the driver, not evidence about the defense.
