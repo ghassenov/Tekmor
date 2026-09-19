@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from tekmor.defense import Action, ActionProvenance, AgentState, Decision, Defense
 from tekmor.defense.core import mediate
 from tekmor.observability import EventLog, Outcome, decision_event
-from tekmor.provenance.taint import TaintTracker
+from tekmor.provenance.taint import TaintTracker, endorse
 from tekmor.runtime.gateway import Approver, Execution, ToolGateway, deny
 from tekmor.runtime.model import ModelAdapter, ScriptedModel
 from tekmor.simulator.scenario import Scenario
@@ -112,7 +112,12 @@ def run(
                 )
             )
         if run_step.source is not None:
-            taint.observe(run_step.source)
+            source = run_step.source
+            if scenario.policy.endorse_named:
+                # The call that *executed* produced the observation, so its arguments
+                # are the ones that say what was read.
+                source = endorse(source, run_step.executed.args, scenario.task)
+            taint.observe(source)
         outcomes.append(
             StepOutcome(action, decision, run_step.executed, run_step.result, run_step.error)
         )

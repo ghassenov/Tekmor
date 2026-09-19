@@ -36,8 +36,10 @@ from tekmor.policy.core import Policy
 from tekmor.provenance.trust import Source, TrustLevel
 
 #: Bumped by any change that an existing reader could misread. 1 was the first schema;
-#: 2 replaced `source_ids` with labelled `sources` and added `outcome`.
-SCHEMA_VERSION = 2
+#: 2 replaced `source_ids` with labelled `sources` and added `outcome`; 3 added
+#: `endorsed_by` to each source, because `integrity` can now be above the meet of the
+#: `trust` labels and a reader who did not know why would misread the decision.
+SCHEMA_VERSION = 3
 
 #: What the gateway did with the decided action. Three words, no free text: "the tool
 #: ran", "nothing ran", "the tool ran and raised". The message is the caller's content.
@@ -86,6 +88,7 @@ class DecisionEvent:
                     "trust": source.trust.name,
                     "origin": source.origin,
                     "confidential": source.confidential,
+                    "endorsed_by": source.endorsed_by,
                 }
                 for source in self.sources
             ],

@@ -103,6 +103,14 @@ def _e(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def _label(source: dict) -> str:
+    """How a source's label reads on hover, endorsement included (schema 3)."""
+    text = f"{source.get('trust')} via {source.get('origin') or '?'}"
+    if source.get("endorsed_by"):
+        text += f", endorsed by {source['endorsed_by']}"
+    return text
+
+
 def sources_of(event: dict) -> list[dict]:
     """The labelled influence set, or bare ids with an explicit UNKNOWN for schema 1."""
     if "sources" in event:
@@ -184,7 +192,7 @@ def graph(steps: Sequence[dict]) -> str:
             f'<text x="{SOURCE_X - 12}" y="{y + 4}" text-anchor="end" font-size="12" '
             f'fill="currentColor">{_e(label)}</text>'
             f'<circle cx="{SOURCE_X}" cy="{y}" r="5" fill="{_e(colour)}">'
-            f"<title>{_e(source.get('trust'))} via {_e(source.get('origin') or '?')}</title>"
+            f"<title>{_e(_label(source))}</title>"
             f"</circle>"
         )
 
@@ -216,8 +224,9 @@ def timeline(steps: Sequence[dict]) -> str:
         influences = "".join(
             f'<span class="tag" style="border-color:'
             f'{_e(TRUST_COLOUR.get(str(s.get("trust")), TRUST_COLOUR["UNKNOWN"]))}" '
-            f'title="{_e(s.get("trust"))} via {_e(s.get("origin") or "?")}">'
-            f"{_e(s['id'])}{' 🔒' if s.get('confidential') else ''}</span>"
+            f'title="{_e(_label(s))}">'
+            f"{_e(s['id'])}{' 🔒' if s.get('confidential') else ''}"
+            f"{' · endorsed' if s.get('endorsed_by') else ''}</span>"
             for s in sources_of(step)
         )
         args = ", ".join(_e(name) for name in step.get("arg_names", ()))

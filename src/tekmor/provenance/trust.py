@@ -29,6 +29,12 @@ class TrustLevel(IntEnum):
     SYSTEM_POLICY = 5
 
 
+#: The integrity an endorsement raises content to: the default Trusted-Action threshold,
+#: and no higher. An endorsed document is one the user vouched for acting on, not one the
+#: user wrote.
+ENDORSED = TrustLevel.TRUSTED_INTERNAL
+
+
 def least_trusted(levels: Iterable[TrustLevel]) -> TrustLevel:
     """Meet of the lattice: the integrity of something influenced by all of `levels`.
 
@@ -64,3 +70,12 @@ class Source:
     trust: TrustLevel
     origin: str = ""
     confidential: bool = False
+    #: The id of the authenticated source that endorsed this content, or None. Set only
+    #: by `taint.endorse`, and it never rewrites `trust`: the trace keeps the label the
+    #: content arrived with *and* the fact that someone vouched for it.
+    endorsed_by: str | None = None
+
+    @property
+    def integrity(self) -> TrustLevel:
+        """The label a decision is judged against: `trust`, raised to `ENDORSED` if endorsed."""
+        return max(self.trust, ENDORSED) if self.endorsed_by else self.trust
