@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -365,7 +365,10 @@ def run_pair(
 
 
 def evaluate(
-    suites: Sequence[str], limit: int | None = None, endorse: bool = False
+    suites: Sequence[str],
+    limit: int | None = None,
+    endorse: bool = False,
+    build: Callable[[], Sequence[Defense]] = defenses,
 ) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
 
@@ -378,7 +381,7 @@ def evaluate(
         suite = loaded[name]
         users = list(suite.user_tasks.values())[:limit]
         injections = list(suite.injection_tasks.values())[:limit]
-        for defense in defenses():
+        for defense in build():
             attack = load_attack("direct", suite, None)
             for user_task in users:
                 records.append(run_pair(name, suite, defense, user_task, None, attack, endorse))
