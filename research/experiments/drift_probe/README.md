@@ -82,3 +82,60 @@ downstream of it does not repeat the forward passes.
   catch that.
 - An injected instruction is the thing that drifts the task. Compositional attacks,
   whose fragments are individually benign, are expected to be missed by construction.
+
+## Results (observed, 2026-09-19)
+
+Run: `uv run --extra qwen --extra agentdojo --with pyarrow python -m
+research.experiments.drift_probe.probe` on CPU, 2 493 s. The full report is
+`results/report.json` (gitignored, reproduced by rerunning). 160 training pairs and 60
+validation pairs. 8 AgentDojo contexts exceeded 4 096 tokens and were truncated head and
+tail.
+
+**Layer.** 11 of 28, chosen on validation. Validation AUROC by layer rises from 0.92
+(layer 1) to 0.99 (layer 11) and falls to 0.68 at the last layer.
+
+| set | AUROC | TPR at 0.5 | FPR at 0.5 | positives / negatives |
+|---|---|---|---|---|
+| validation (synthetic, held-out templates and tasks) | 0.99 | 0.50 | 0.00 | 60 / 60 |
+| A: Tekmor matrix | 0.82 | 0.83 | **0.25** | 18 / 8 |
+| B: AgentDojo v1.2.2 | 0.58 | 0.90 | **0.82** | 97 / 97 |
+
+**Set A, per scenario.** Every scenario with at least one untrusted document scores at
+least 0.73, and 15 of those 17 score at least 0.99. Every scenario with none scores 0 by
+the method's rule. That covers both benign scenarios with an untrusted document: the SOC
+phishing triage (1.00) and the honest endorsed invoice (0.99). The endorsed-invoice
+attack scores 0.998, one point above its benign twin. The two attacks with no untrusted
+document (the direct request and the mislabelled leak) score 0.
+
+**Set B, the attacks the core misses.** Under endorsement, 22 of set B's positive pairs
+are attacks the core lets through. The probe flags 20 of them, and it also flags 18 of
+their 22 clean twins.
+
+## Interpretation (inferred)
+
+- **The gate is failed on both held-out sets.** The FPR on benign content is 25% on the
+  matrix and 82% on AgentDojo, against a threshold of 10%. Criterion 2 is met only
+  nominally. The probe does flag attacks the core misses (the endorsed invoice, 20 of 22
+  AgentDojo pairs), but it flags their benign twins at almost the same rate. A flag that
+  does not separate the twin from the attack is not a catch.
+- **What the probe learned is "external text arrived", not "an instruction arrived".**
+  On the matrix its score is almost a function of whether the scenario has an untrusted
+  document at all. On AgentDojo, where every run reads tool output, AUROC falls to 0.58.
+  This is the register shift the *Assumptions* section named in advance: WikiText
+  paragraphs versus mail, invoices and tool dumps. The synthetic validation split shared
+  that register, which is why it read 0.99.
+- **The validation number is the misleading one**, and it is the number a probe paper
+  would lead with. It is reported first here so it is read against the two below it.
+
+## Verdict
+
+**Refuted on the proxy; Proposal C is demoted to future work**, as the gate prescribes.
+Nothing is integrated into `src/`. Two things would have to change before reviving it:
+
+1. **Train on the target register.** Tool outputs and business documents, with and
+   without injections, disjoint from both evaluation sets. That is a data-collection
+   task, not a modelling one.
+2. **Run it on the reference model.** Qwen3-8B with a GPU (Part IX, limit 4). Even a pass
+   on this proxy would not have counted.
+
+**Negative result recorded, not dropped** (`research/CLAUDE.md`).
