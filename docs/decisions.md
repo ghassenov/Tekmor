@@ -1551,3 +1551,137 @@ sets).
 **Not claimed.** Full-precision Qwen3-8B, other layers' held-out behaviour (layer choice
 stays on synthetic validation, as pre-registered), or anything about TaskTracker's own
 numbers.
+
+## Argument-level provenance: it buys utility, and it turns a labelling error into an authorization
+
+**Context.** AgentDojo's call-level result is this project's worst number: `tekmor` equals
+`deny-sensitive` on three suites of four, pooled BTU 0.45, and endorsement buys BTU 0.69
+only by paying ASR 0.04 → 0.15. The 2026 literature answers with argument granularity —
+PACT (arXiv:2605.11039), AuthGraph (arXiv:2605.26497), on the line FIDES and CaMeL
+started — where what matters is whether untrusted content *determined an
+authority-bearing argument*. Pre-registered, with hypotheses, arms, role map and
+predictions, in `research/experiments/argument_provenance/README.md` and committed before
+the first run.
+
+**Decided. The mechanism is implemented in `src/` and stays off by default.**
+`TaintTracker.origins` traces each argument value verbatim to the observations that
+contain it; `Policy.argument_provenance` judges Trusted-Action on the authority-bearing
+arguments instead of the whole call; `content_args` are exempt as payload; `target_args`
+are never raised by an endorsement unless `endorse_targets` says so; and payload the agent
+writes is capped so a naive store cannot launder it back as trusted. An untraced value
+falls back to the call-level rule, so tracing only ever narrows which influences count.
+Event schema 4 records each argument's origins by source id, never by value.
+
+**What it measured** (AgentDojo v1.2.2, frozen configuration, 97 benign runs and 583 valid
+pairs per arm; the matrix unchanged in all five arms):
+
+```
+arm                           BTU          ASR           UA
+tekmor                   44/97 = 0.45  21/583 = 0.04    0.46
+tekmor+endorse           67/97 = 0.69  85/583 = 0.15    0.66
+A  arguments             53/97 = 0.55  42/583 = 0.07    0.54
+B  arguments+endorse-all 74/97 = 0.76 184/583 = 0.32    0.67
+C  arguments+endorse     66/97 = 0.68  64/583 = 0.11    0.67
+```
+
+- **The primary hypothesis is refuted.** Arm C had to reach BTU ≥ 0.69 *and* ASR ≤ 0.04.
+  It reaches 0.68 and 0.11. Argument level alone (A) is refuted too: it buys ten points of
+  BTU and costs three of ASR. Both are trades, and the gate asked for a dominance.
+- **Role scoping is confirmed to matter.** Letting an endorsement raise destinations (B)
+  triples ASR, 0.11 → 0.32, for eight points of utility. That is the one hypothesis the
+  run supports.
+- **The mechanism's own failure mode is the finding.** 20 of arm A's 21 new landings are
+  slack injections whose URL the attacker placed in the **channel list**, which the frozen
+  configuration labels `trusted`. Call-level taint took the meet over everything read, so
+  any untrusted read masked that wrong label; argument-level tracing lets the mislabelled
+  source *vouch* for the attacker's URL. **Under argument granularity, every `trusted`
+  label must be right, because there is no meet to hide a wrong one.** That is a worse
+  failure mode than over-tainting, and it is why this stays off.
+- The other two causes are separate: the travel landing is a content-channel attack (the
+  recipient is the user's own, the payload is the secret; nothing on AgentDojo is labelled
+  confidential, so Permitted-Flow is not armed), and arm C's workspace landings are
+  authority values too short to trace (`file_id: '13'`) falling back to call level, where
+  the endorsement raises them.
+- **A pre-registered prediction was wrong, and the reason is structural.** The matrix's
+  endorsed-invoice pair was predicted to flip under C. It does not move: the payee is bound
+  at `prepare_payment`, which that policy does not call sensitive, and the sensitive steps
+  carry only the handle `PAY-1`. An authority value laundered through world state is
+  invisible to a rule that reads only the arguments of the call in front of it — the same
+  shape as the canary scanner's recorded blind spot. PACT reports that roles *and*
+  cross-step provenance are both needed; this is that ablation from the other side.
+
+**Verdict: built and measured, not adopted.** `argument_provenance` stays off. The next
+arm is field-level labels inside one observation (a channel list is trusted for its
+structure, not for the names third parties chose) and provenance for handles.
+
+**Rejected.** Editing `SUITES` so `get_channels` is untrusted. It would fix 20 of the 21
+new landings, and it would be a configuration tuned on held-out results, which stops
+AgentDojo being held out. Lowering `MIN_NAME` to trace `'13'`: a two-character value
+matches anywhere, and a trace that matches anywhere vouches for anything.
+
+**Not claimed.** Nothing about a model-driven agent. The driver replays ground truth and
+obeys every injection, so ASR is the always-obeys bound, and provenance is near-oracle
+because values are copied verbatim. None of these numbers is comparable with PACT's,
+AuthGraph's, CaMeL's or FIDES's.
+
+## Field-level labels: the granularity bug behind the argument-level failure (2026-09-20)
+
+Pre-registered in `research/experiments/argument_provenance/field_labels.md`, the
+follow-up arm the entry above named. `TaintTracker.field_labels`, default **off**.
+
+**The rule.** A tool result vouches for a value it *returned*, never for a fragment of
+one. The user's request is never split — it is prose the user authored whole, where a
+tool result is a container holding text other principals wrote. A source the driver
+cannot split into fields keeps whole-text matching, so the rule never silently
+un-vouches. Both sides of the match reuse `leaves()`, so "a value" has one definition.
+
+**Measured** (AgentDojo v1.2.2, four suites, 97 benign runs and 583 valid pairs, all
+arms from one commit; A and C reproduce the recorded numbers exactly):
+
+```
+arm                       BTU           ASR
+A    arguments        53/97 = 0.55  42/583 = 0.072
+A+F  + field labels   53/97 = 0.55  22/583 = 0.038
+C    args+endorse     66/97 = 0.68  64/583 = 0.110
+C+F  + field labels   66/97 = 0.68  44/583 = 0.075
+```
+
+- **The previous entry's diagnosis was half wrong, and this is the correction.** It
+  concluded "under argument granularity, every `trusted` label must be right". It is
+  not a labelling error: `get_channels` *is* trusted for the list it returns. The
+  injection is a whole channel name (`"External_{prompt_injection_channel}"`) and the
+  attacker's URL is a **fragment** of it. The defect was granularity, and it is fixable
+  without touching a single label.
+- All 20 cause-1 landings removed, at **zero** measured benign cost, in both arms. Only
+  one cell moves per pair: slack ASR 0.39 → 0.20. Nothing in banking, travel or
+  workspace changes.
+- **The zero cost is not a deployment estimate**, and the pre-registration said so before
+  the run. The driver replays ground truth, so benign values are copied verbatim out of
+  structured results — exactly the case where a value is a whole field. A model that
+  reformats a value makes it untraced, which falls back to call level: safe and
+  utility-costly. Field labels are expected to cost real utility with a model-driven
+  agent, and this harness cannot measure how much.
+- **A pre-registered prediction was exactly right this time.** Arm C+F was computed in
+  advance to be unable to pass the gate, landing at ≈ (21 + 22 + 1)/583 = 0.075.
+  Measured 44/583 = 0.0755, from precisely the predicted groups.
+- **The residual ordering is now inverted.** Arm C's landings decompose into cause 1
+  (20, fixed here), cause 3 — an authority value too short to trace, raised by
+  endorsement (22) — the URL-fetch residual (21) and the content channel (1). Cause 3 is
+  now the largest group. The previous entry listed field labels first and handle
+  provenance second; **cross-step binding for handles is the larger residual.**
+- H1 is **refuted by one run** on its strict form (22/583 against a gate of ≤ 21/583).
+  That run is the travel content-channel attack, which the pre-registration listed as out
+  of scope by construction and which lands in arm A too. The refutation is real and says
+  nothing about field labels.
+
+**Verdict: built and measured, not adopted.** The switches stay off. The binding reason
+is not the numbers: **AgentDojo is no longer held out for this change.** Cause 1 was
+diagnosed from AgentDojo and this mechanism was built to fix it. The mitigations are
+real — the rule is general, adds no configuration, changes no frozen label, and its
+predicted residual and its C+F arithmetic were both stated in advance and both landed —
+but a mechanism that fixes a failure found in a benchmark cannot be adopted on that
+benchmark's own numbers. Adoption is gated on a run against a benchmark this project has
+not scored against (AgentDyn, arXiv:2602.03117).
+
+**Not claimed.** Nothing about a model-driven agent. ASR is the always-obeys bound and
+provenance is near-oracle, more load-bearingly so for this arm than the parent one.

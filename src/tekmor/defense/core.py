@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
 from tekmor.policy.core import Policy
+from tekmor.provenance.taint import ArgumentOrigin
 from tekmor.provenance.trust import Source, TrustLevel, least_trusted
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,9 @@ class ActionProvenance:
     """
 
     sources: tuple[Source, ...] = ()
+    #: Where each argument's values came from (`TaintTracker.origins`). Empty when the
+    #: driver did not trace them, and then every argument is judged at call level.
+    arguments: tuple[ArgumentOrigin, ...] = ()
 
     @property
     def confidential(self) -> bool:
@@ -68,9 +72,34 @@ class ActionProvenance:
         """
         return least_trusted(s.integrity for s in self.sources)
 
+    def argument_integrity(self, name: str, *, endorsed: bool = True) -> TrustLevel:
+        """The integrity of one argument: the minimum over its values.
+
+        A traced value counts at the *highest* label among the observations that contain
+        it. A value a trusted source supplied is vouched for even if an attacker echoes
+        it, because the echo adds no authority the trusted copy lacked. An untraced
+        value, or an argument nobody traced, counts at call level. A value is never
+        raised above the label of an observation that actually contained it, and
+        untraceability never raises anything.
+
+        `endorsed=False` judges on the raw `trust` labels, for arguments an endorsement
+        may not raise (`Policy.target_args`).
+        """
+        label = (lambda s: s.integrity) if endorsed else (lambda s: s.trust)  # noqa: E731
+        call = least_trusted(label(s) for s in self.sources)
+        origin = next((a for a in self.arguments if a.name == name), None)
+        if origin is None:
+            return call
+        return min(
+            (max(map(label, vouchers)) if vouchers else call for vouchers in origin.values),
+            default=call,
+        )
+
     @classmethod
-    def of(cls, sources: Iterable[Source]) -> ActionProvenance:
-        return cls(tuple(sources))
+    def of(
+        cls, sources: Iterable[Source], arguments: Iterable[ArgumentOrigin] = ()
+    ) -> ActionProvenance:
+        return cls(tuple(sources), tuple(arguments))
 
 
 @dataclass(frozen=True, slots=True)

@@ -83,8 +83,15 @@ What remains is the *granularity*. Influence is call-level and prefix-monotone â
 observation the agent has seen taints every later action â€” so a benign action taken
 after reading one hostile document is labelled by that document. That is the
 conservative direction and the utility cost is real; the benign half of each scenario
-pair is what measures it. Field-level provenance and argument-level attribution are the
-upgrade, and they are not implemented.
+pair is what measures it. Argument-level attribution is now implemented behind
+`Policy.argument_provenance`, measured, and **off**: on AgentDojo it raises BTU 0.45 ->
+0.55 and ASR 0.04 -> 0.07, and it lets a `trusted` source vouch for a *fragment* of
+a field that third parties authored (`docs/decisions.md`). Field-level labels inside one
+observation (`TaintTracker.field_labels`, also off) fix that: they remove every one of
+those landings at no measured benign cost on AgentDojo, but the benchmark is no longer
+held out for them and the zero cost is an artifact of a ground-truth driver. Provenance
+for a value laundered through world state into an opaque handle is now the largest
+remaining residual.
 
 ## Layout
 

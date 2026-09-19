@@ -33,13 +33,16 @@ from typing import Literal
 
 from tekmor.defense.core import Action, ActionProvenance, Decision
 from tekmor.policy.core import Policy
+from tekmor.provenance.taint import ArgumentOrigin
 from tekmor.provenance.trust import Source, TrustLevel
 
 #: Bumped by any change that an existing reader could misread. 1 was the first schema;
 #: 2 replaced `source_ids` with labelled `sources` and added `outcome`; 3 added
 #: `endorsed_by` to each source, because `integrity` can now be above the meet of the
-#: `trust` labels and a reader who did not know why would misread the decision.
-SCHEMA_VERSION = 3
+#: `trust` labels and a reader who did not know why would misread the decision; 4 added
+#: `arguments`, the sources each argument value was traced to, because under
+#: argument-level Trusted-Action the meet of all sources is no longer what was judged.
+SCHEMA_VERSION = 4
 
 #: What the gateway did with the decided action. Three words, no free text: "the tool
 #: ran", "nothing ran", "the tool ran and raised". The message is the caller's content.
@@ -72,6 +75,9 @@ class DecisionEvent:
     #: What the gateway did. "unknown" is not a value: a decision nobody executed is
     #: `not_executed`, and a decision logged outside a run has no event here at all.
     outcome: Outcome
+    #: Per argument, per value, the ids of the sources it was traced to (`[]` is an
+    #: untraced value). Ids only, never the values: those may be secrets.
+    arguments: tuple[ArgumentOrigin, ...] = ()
     schema_version: int = SCHEMA_VERSION
 
     def as_dict(self) -> dict[str, object]:
@@ -101,6 +107,10 @@ class DecisionEvent:
             "risk": self.risk,
             "rewritten_tool": self.rewritten_tool,
             "outcome": self.outcome,
+            "arguments": {
+                origin.name: [[source.id for source in value] for value in origin.values]
+                for origin in self.arguments
+            },
             "timestamp": self.timestamp,
         }
 
@@ -123,6 +133,7 @@ def decision_event(
         tool=action.tool,
         arg_names=tuple(action.args),
         sources=provenance.sources,
+        arguments=provenance.arguments,
         integrity=provenance.integrity,
         confidential=provenance.confidential,
         # The policy a decision was computed under is part of the decision: a trace
