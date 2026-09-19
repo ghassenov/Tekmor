@@ -227,6 +227,6 @@ def test_main_writes_the_variants_beside_a_manifest(tmp_path):
     assert manifest["variants"] and manifest["rejected"]
     assert manifest["inputs"]
     lines = (raw / "runs.jsonl").read_text().splitlines()
-    assert len(lines) == 5 * (24 + len(manifest["variants"]))
+    assert len(lines) == 5 * (len(load_matrix(SCENARIOS)) + len(manifest["variants"]))
     rows = json.loads((processed / "robustness.json").read_text())
     assert {row["defense"] for row in rows} >= {"tekmor", "keyword"}
