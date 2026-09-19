@@ -840,3 +840,134 @@ calibration, and the measurement says the ordinal scale is better than the fit o
 sample. Selective escalation is untested. The viewer has been read by its author on this
 repository's own output and by nobody else; it is a debugging and explanation tool, not
 evidence about anything.
+
+## The full scenario matrix: seven families, five levels, and a grid to read them in
+
+**Context.** Phase 3 had a harness, metrics, a calibration protocol and a viewer, and
+seven scenarios to point them at. Seven scenarios cover three of the seven attack
+families of `technical-doc.md` Part I and one difficulty level in any real sense, so
+every number the repository reported was a number about *those seven runs*: CALIB-RISK
+could be computed but not tested, ASR moved in steps of one seventh, and three families
+(direct instruction, memory poisoning, tool-output tampering) had never been run at all.
+
+**Decided. The matrix is twenty-four scenarios: every family, every level 1-5, three
+domains, with the benign half carried by the `over_refusal` family rather than by
+untyped "benign twins".** A scenario now states `family` and `level`, validated against
+the taxonomy — a free-text family would open a grid row of its own on a typo and split
+the family it meant to join — and `parse_scenario` rejects a scenario whose `benign`
+flag and family disagree, because `over_refusal` *is* the claim "this is legitimate
+work". Both fields are scorer metadata, on the same side of the boundary as `id` and
+`benign`: they reach the grid, never a defense.
+
+**The grid is the report Part VI asks for**, `evaluation.metrics.grid`: one row per
+(family, level), one column per defense, `k/n` runs that ended the way that row's
+question asks — the attacker's goal not reached, or, on the `over_refusal` rows, the
+user's task completed. A cell is a fraction rather than a tick because a cell holds more
+than one scenario and collapsing them would hide the one that disagrees. The benign rows
+sit in the same table as the attacks on purpose: a defense that passes every attack row
+by refusing everything fails the rows underneath it, in the same column, where nobody
+has to go looking for the trade.
+
+**Three families needed the simulator to grow, and each addition is deliberately
+minimal.** `remember`/`recall` in the enterprise domain are two tools over the ordinary
+document store, and the store is **naive on purpose**: `remember` labels whatever the
+agent hands it as ordinary internal content, which is what a memory implementation
+nobody thought about does. So the recall genuinely launders the label, and what refuses
+the action is the run's taint, which still holds the read that produced the text. A
+memory store taught to be careful would have proved nothing about the provenance layer.
+`lookup_vendor` (financial) and `enrich_indicator` (SOC) are the same read under names
+that say where the content came from, which is what makes tool-output tampering legible
+in a trace rather than indistinguishable from reading a file.
+
+**What the matrix measures, on the same scripted adapter and the same five defenses**
+(`uv run python -m evaluation.harness`):
+
+```
+defense                    BTU     ASR     CVR     FBR     UER
+allow-all                 1.00    1.00    0.46    0.00     n/a
+deny-sensitive            0.14    0.00    0.00    0.21     n/a
+keyword                   0.57    0.88    0.29    0.12     n/a
+tekmor                    1.00    0.06    0.08    0.00    0.00
+tekmor+canary             1.00    0.00    0.04    0.00    0.00
+
+defense                      P       R      F1   AUROC   AUPRC  chance     ECE
+tekmor                    0.80    0.94    0.86    0.95    0.89    0.13    0.07
+tekmor+canary             0.81    1.00    0.89    0.99    0.95    0.13    0.06
+```
+
+Seventeen attacks and seven benign scenarios, 130 scored actions per monitor where there
+were 21. `tekmor`'s single remaining attack success is still `enterprise-leak-mislabelled`
+— the argument-level residual — and the canary layer still closes it and nothing else.
+
+**Two numbers got worse, and both are the matrix doing its job.**
+
+`deny-sensitive` no longer scores BTU 0.00. It completes the SOC phishing triage, whose
+only action is opening a ticket: the one piece of legitimate work in the matrix that
+needs no sensitive tool. Refusing by tool name keeps exactly the work nobody needed a
+defense for, which is a sharper statement of the baseline than a flat zero was.
+
+`keyword` no longer scores BTU 1.00. It now blocks three benign scenarios — a security
+bulletin that quotes the phishing mail it is warning staff about, a credential rotation
+addressed to the rotation mailbox, and a phishing triage ticket that uses the words
+"API token" — so the over-refusal trap is now measured rather than described. FBR 0.12
+against `tekmor`'s 0.00 is the number the baseline exists to supply.
+
+**CVR is no longer zero for `tekmor+canary`, and the run it counts is benign.**
+`enterprise-benign-authorized-share` sends the portal token to a recipient the policy
+authorizes, so Permitted-Flow is satisfied and both the monitor and the scanner allow it
+— correctly. CVR is defined as a tagged secret reaching an outbound argument in any
+encoding (`technical-doc.md` Part VI) and knows nothing about authorization, so it counts
+the run as a violation. **The definition is not being changed to make the number
+prettier.** Changing a metric silently invalidates every prior comparison, and the more
+useful outcome is that the matrix now contains a case where the metric and the policy
+disagree — asserted in `tests/evaluation/test_harness.py`, so a *different* run leaking
+is a failure rather than a tick. It is also the only scenario that exercises
+`authorized_recipients` at all.
+
+**The other direction of the same coupling is now a scenario.**
+`enterprise-exfil-split-args` splits the token across the subject and body of one mail.
+`found_in` searches each argument value on its own, by design, so CVR reports zero for a
+run in which a secret demonstrably leaves — under `allow-all` the mail goes out and the
+metric does not see it. That scenario therefore states its attack success over the mail
+itself rather than over `leaked`, and the provenance rule blocks it anyway, because it
+never reads the argument. This is the uncomfortable coupling recorded when the scanner
+was written — the measurement shares the matcher's blind spots — turned from a caveat
+into a run anyone can look at.
+
+**CALIB-RISK reverses on the larger matrix, and that was the stated condition.** The
+previous entry reported Platt scaling making ECE *worse* (0.11 → 0.12) on 21 actions and
+said the honest conclusion was that there was not enough data to fit it. On 130 actions:
+
+```
+defense                    ECE    ECE'   Brier  Brier'   AUROC  AUROC'   folds       n     inv
+tekmor                    0.07    0.04    0.03    0.03    0.95    0.93      24     130       0
+tekmor+canary             0.06    0.04    0.02    0.02    0.99    0.99      24     130       0
+```
+
+Calibration now *improves* ECE, leave-one-scenario-out, with no inverted fold. Two
+cautions belong beside it. The raw ECE also fell (0.11 → 0.07) because the action mix
+changed — a longer matrix is mostly allowed, safe actions scoring 0.0 — so **only the
+raw-versus-calibrated comparison within one matrix means anything**; the two matrices are
+different samples and the columns across them are not comparable. And the fit still costs
+`tekmor` a little ranking (AUROC 0.95 → 0.93), which is fold-to-fold instability, not a
+monotone map: the scale in use therefore stays the ordinal one, and the verdicts still
+come from the rules.
+
+**Rejected.** A `benign_work` family beside `over_refusal` (two names for the same
+question, and a grid row nobody could read against its attack row). Free-text families.
+Generating the matrix from templates — the variants Phase 4 needs are transformations of
+untrusted *content*, and a generated family would test the generator. Teaching the memory
+store to carry labels (it would prove the store, not the provenance layer; the
+cross-session case is a declared document instead, and it says so in the file). Redefining
+CVR to exempt authorized recipients. Dropping the split-argument scenario because CVR
+cannot score it. Trimming `deny-sensitive`'s new BTU to zero by making the phishing ticket
+sensitive.
+
+**Not claimed.** Twenty-four scenarios is a matrix, not a benchmark: it is written by the
+same people who wrote the defense, scored by the same process, and every attack is a
+scripted path rather than a model's choice. Level 4 is represented by *static* rewordings;
+the adaptive attacker that mutates against observed decisions is Phase 4 and nothing here
+substitutes for it. The cross-session memory label is declared, not derived — persistent
+memory that carries a label between runs does not exist. Field-level provenance still does
+not exist, so a tampered field taints the whole record it arrived in, and the tool-output
+tampering rows are evidence about the flow rule, not about field granularity.

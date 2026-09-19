@@ -41,7 +41,7 @@ from pathlib import Path
 
 from evaluation.calibration import by_defense as calibrate_by_defense
 from evaluation.calibration import table as calibration_table
-from evaluation.metrics import RunRecord, by_defense, calibration, record, table
+from evaluation.metrics import RunRecord, by_defense, calibration, grid, record, table
 from tekmor import __version__
 from tekmor.defense import CanaryScanner, Defense, ReferenceMonitor
 from tekmor.defense.baselines import AllowAll, DenySensitive, KeywordFilter
@@ -117,6 +117,8 @@ def manifest(scenarios: Iterable[Scenario], names: Sequence[str], directory: Pat
                 "version": scenario.version,
                 "domain": scenario.domain,
                 "benign": scenario.benign,
+                "family": scenario.family,
+                "level": scenario.level,
             }
             for scenario in scenarios
         ],
@@ -196,6 +198,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     view.write_text(render(read(log.path), title=f"Tekmor {stamp}"), encoding="utf-8")
 
     print(table(metrics))
+    print()
+    print(grid(records))
     print()
     print(calibration(metrics))
     print()
