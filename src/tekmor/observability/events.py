@@ -1,13 +1,13 @@
 """Append-only JSONL event log.
 
-One line per mediated action. `docs/technical-doc.md` Part V lists the full event
+One line per mediated action. `docs/10-research-report.md` Part V lists the full event
 schema; this carries the fields that exist in the current implementation. Fields are
 added as the components that produce them land — an event never claims a signal the
 decision did not use.
 
 The *aggregate* risk score is logged and the per-signal contributions are not. The
 schema asks for both, and the breakdown is the half that is a hill-climbing channel
-(`defense/CLAUDE.md`), so it stays derivable from the signals rather than written next
+(`docs/03-architecture.md` §3.7), so it stays derivable from the signals rather than written next
 to a verdict an attacker may get to see. `defense.risk.contributions` computes it.
 
 Argument *values* are never written, and the rule holds whether or not a value is a

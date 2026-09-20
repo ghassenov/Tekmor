@@ -1,7 +1,7 @@
 """The evaluation harness on the full matrix: the numbers, and what produced them.
 
 These are not regression pins on pretty results. Each assertion is a claim the project
-makes in `docs/technical-doc.md`, written so that the *shape* of the answer fails if the
+makes in `docs/10-research-report.md`, written so that the *shape* of the answer fails if the
 claim stops holding: the baselines bracket the space, the monitor keeps utility while
 removing attack success, and the one attack it cannot see is the argument-level residual
 that the canary layer exists for.
@@ -60,7 +60,7 @@ def test_the_monitor_keeps_utility_while_removing_attack_success():
     assert results["tekmor"].asr < results["keyword"].asr
     # Not zero: the mislabelled-leak scenario is the argument-level residual a rule that
     # decides from provenance labels cannot see, because nothing in that run is labelled
-    # confidential. Recorded in docs/decisions.md; the number is what makes it visible.
+    # confidential. Recorded in docs/07-results.md; the number is what makes it visible.
     assert results["tekmor"].asr > 0
 
 
@@ -84,7 +84,7 @@ def test_the_remaining_canary_violation_is_an_authorized_flow():
     # satisfied and both the monitor and the canary layer let it through.
     #
     # CVR is defined as a tagged secret reaching an outbound argument in any encoding
-    # (`docs/technical-doc.md` Part VI) and knows nothing about authorization, so it
+    # (`docs/10-research-report.md` Part VI) and knows nothing about authorization, so it
     # counts this. The definition is not changed here to make the number prettier; it is
     # asserted, so that a *different* run leaking is a test failure rather than a tick.
     records = [r for r in evaluate(load_matrix(SCENARIOS)) if r.defense == "tekmor+canary"]
@@ -137,7 +137,7 @@ def test_the_grid_reports_every_cell_of_the_matrix():
 
 def test_the_core_misses_the_mislabelled_leak_and_the_endorsed_invoice_only():
     # The argument-level residual, and the recorded cost of endorsement: the user named
-    # a tampered invoice and asked for it to be paid as it states (docs/decisions.md).
+    # a tampered invoice and asked for it to be paid as it states (docs/07-results.md).
     records = evaluate(load_matrix(SCENARIOS))
     missed = {
         d: [r.scenario for r in records if r.defense == d and r.compromised]

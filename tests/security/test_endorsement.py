@@ -1,7 +1,7 @@
 """Endorsement: the one way trust is raised, and everything it must refuse to raise.
 
 `provenance.taint.endorse` exists because call-level taint refused most benign AgentDojo
-work (docs/decisions.md). Every test below is either a boundary it must hold, or the
+work (docs/07-results.md). Every test below is either a boundary it must hold, or the
 scenario pair that measures both what it buys and what it costs.
 """
 

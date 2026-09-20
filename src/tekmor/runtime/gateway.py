@@ -1,6 +1,6 @@
 """The tool gateway: the world's only door.
 
-`docs/technical-doc.md` Part I: approved actions go to the tool gateway, which updates
+`docs/10-research-report.md` Part I: approved actions go to the tool gateway, which updates
 world state. The gateway owns the *last* check before execution — it turns a `Decision`
 into "this exact action runs" or "nothing runs" — so complete mediation is a property of
 one small class rather than of every caller that drives an agent.

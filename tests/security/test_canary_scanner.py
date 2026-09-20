@@ -2,7 +2,7 @@
 
 The interesting case is not the injected invoice — the provenance rule already stops
 that, in every encoding, without reading a single argument. It is the *residual* recorded
-in `docs/decisions.md`: a secret that reaches an argument without passing through a
+in `docs/07-results.md`: a secret that reaches an argument without passing through a
 labelled observation is invisible to a rule that decides from labels. The first test here
 is that gap, reproduced rather than asserted away, and the rest is the layer that closes
 it and the benign traffic it must not touch.
@@ -82,7 +82,7 @@ def test_the_scanner_closes_it(mislabelled):
     ],
 )
 def test_the_encodings_a_keyword_filter_loses_to(mislabelled, label, body):
-    # `tests/CLAUDE.md`: the mechanism, not the wording. The keyword filter is run on the
+    # Test the mechanism, not the wording. The keyword filter is run on the
     # same steps with the plain token as its keyword, which is the best case for it, and
     # it still lets every one of these through.
     last = mislabelled.steps[-1]
@@ -138,7 +138,7 @@ def test_an_authorized_recipient_may_receive_the_secret(mislabelled):
 
 
 def test_the_scanner_only_raises_suspicion(attack_scenario, benign_scenario, scenario):
-    # `defense/CLAUDE.md` invariant 4, monotone-safe fusion: the layer may turn ALLOW into
+    # Monotone-safe fusion (`docs/03-architecture.md` §3.7): the layer may turn ALLOW into
     # BLOCK, never the reverse. Every scenario is run twice and compared verdict by
     # verdict, so a future change that lets the scan soften a verdict fails here.
     order = {Verdict.ALLOW: 0, Verdict.REWRITE: 1, Verdict.ESCALATE: 2, Verdict.BLOCK: 3}
@@ -186,7 +186,7 @@ def test_a_wrapped_defense_that_raises_still_fails_closed(mislabelled):
 
 
 def test_the_trace_never_carries_the_secret(mislabelled, tmp_path):
-    # `defense/CLAUDE.md`: never a canary value in an explanation. The block is caused by
+    # `docs/03-architecture.md`: never a canary value in an explanation. The block is caused by
     # the value, which is exactly when a reason code is tempted to quote it.
     log = EventLog(tmp_path / "events.jsonl")
     run(mislabelled, scanner(), log=log)
@@ -200,7 +200,7 @@ def test_the_scanner_is_not_a_defense_on_its_own(attack_scenario):
     # Layered over `AllowAll` it stops this canary and nothing else about the injection:
     # the hostile document still drives the agent, and a payload that carried no
     # registered secret would go straight through. It closes a residual; it is not the
-    # rule (`docs/technical-doc.md` Part II).
+    # rule (`docs/10-research-report.md` Part II).
     result = run(attack_scenario, scanner(AllowAll()))
 
     assert result.world.leaked == set()
@@ -281,7 +281,7 @@ def test_the_trace_says_which_defense_produced_the_verdict(mislabelled, tmp_path
         "Finding (Phase 4 robustness variants): base64 of the reversed token is a "
         "composition provenance.canary does not recognise. On a mislabelled page the "
         "monitor has no label to act on and the scanner no form to match, so the secret "
-        "leaves, and CVR, which shares the scanner, records nothing. docs/decisions.md."
+        "leaves, and CVR, which shares the scanner, records nothing. docs/07-results.md."
     ),
 )
 def test_a_composed_encoding_of_a_mislabelled_secret_does_not_leave(mislabelled):

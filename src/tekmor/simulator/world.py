@@ -1,6 +1,6 @@
 """The synthetic world: mutable state, typed tools, and canary-tagged secrets.
 
-`docs/technical-doc.md` Part I: the agent works in a simulated organization, and
+`docs/10-research-report.md` Part I: the agent works in a simulated organization, and
 utility and attack success are checked against *world state* rather than against what
 the agent said it did. This module is that state and the only way to change it.
 
@@ -127,7 +127,7 @@ class World:
     def canaries_in(self, args: Mapping[str, Any]) -> set[str]:
         """Canary names appearing in `args` in any encoding the scanner recognises.
 
-        This is the ground truth behind CVR, which `docs/technical-doc.md` Part V defines
+        This is the ground truth behind CVR, which `docs/10-research-report.md` Part V defines
         as a secret reaching an outbound argument *in any encoding*. It shares
         `provenance.canary` with the defense that acts on the same signal, which is a
         deliberate and uncomfortable coupling: a form the scanner cannot see is a leak

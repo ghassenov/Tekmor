@@ -13,13 +13,13 @@ one is explicit:
   the scenario matrix, the ablations, and the AgentDojo ground-truth sweep. These are not
   transcribed — the script loads the newest matching run and fails if it is absent, so a
   figure cannot silently drift from the results it claims to show.
-- **Transcribed from `docs/decisions.md`**, with the entry named in `SOURCE`, only where
+- **Transcribed from `docs/07-results.md`**, with the entry named in `SOURCE`, only where
   the run cannot be reproduced here: the GPU judge rows and the drift probe (an ephemeral
   Colab VM whose raw records are gone), and the adaptive attacker and argument-granularity
   arms. Those values are quoted, never recomputed, and the figure captions say so.
 
 Nothing here computes a new result. If a number is not already in a results file or in
-`docs/decisions.md`, it does not go in a figure.
+`docs/07-results.md`, it does not go in a figure.
 
 Matplotlib is the `docs` extra and is needed only to regenerate the images; the committed
 PNGs mean a reader never installs it.
@@ -212,9 +212,9 @@ def ablations() -> None:
 # --------------------------------------------------------------------------------------
 # 3. AgentDojo: the security/utility frontier, and where each mechanism sits on it
 # --------------------------------------------------------------------------------------
-#: Arms that cannot be reproduced on this machine, quoted from docs/decisions.md.
+#: Arms that cannot be reproduced on this machine, quoted from docs/07-results.md.
 #: (label, BTU, ASR, label offset in points)
-SOURCE = "docs/decisions.md"
+SOURCE = "docs/07-results.md"
 AGENTDOJO_QUOTED = [
     ("tekmor+endorse", 0.69, 0.146, (11, 2)),
     ("arguments", 0.55, 0.072, (11, 3)),
@@ -346,7 +346,7 @@ def agentdojo_frontier() -> None:
 # --------------------------------------------------------------------------------------
 # 4. The adaptive attacker
 # --------------------------------------------------------------------------------------
-#: Quoted from docs/decisions.md, "The adaptive attacker". Fifty rounds, seeds 0-4, same
+#: Quoted from docs/07-results.md §7.3. Fifty rounds, seeds 0-4, same
 #: curve on every seed; the table reports rounds 0, 12, 25, 37, 50.
 ADAPTIVE_ROUNDS = [0, 12, 25, 37, 50]
 ADAPTIVE = {
@@ -398,7 +398,7 @@ def adaptive() -> None:
         -0.09,
         "The attacker sees its goal, the verdicts and the public reason codes -- never the "
         "risk score. The keyword filter\nfalls within five rounds on every seed; the "
-        "monitor does not move. Quoted from docs/decisions.md, which also\nrecords that the "
+        "monitor does not move. Quoted from docs/07-results.md, which also\nrecords that the "
         "flat curve is partly a measurement artefact.",
         fontsize=7.5,
         color="#555",
@@ -409,7 +409,7 @@ def adaptive() -> None:
 # --------------------------------------------------------------------------------------
 # 5. The drift probe, which failed its gate twice
 # --------------------------------------------------------------------------------------
-#: Quoted from docs/decisions.md, "Proposal C" and "Proposal C on Qwen3-8B".
+#: Quoted from docs/07-results.md §7.5 (the 0.6B proxy and the 8B reference run).
 PROBE_SETS = ["synthetic\n(validation)", "Tekmor matrix\n(held out)", "AgentDojo\n(held out)"]
 PROBE = {"Qwen3-0.6B (proxy)": [0.99, 0.82, 0.58], "Qwen3-8B (reference)": [0.99, 0.83, 0.65]}
 PROBE_FPR = {"Qwen3-0.6B (proxy)": [0.00, 0.25, 0.82], "Qwen3-8B (reference)": [0.00, 0.25, 0.91]}
@@ -456,7 +456,7 @@ def drift_probe() -> None:
         "The probe separates synthetic text and not real tool output: it learned that "
         "*external text arrived*, not that\n*an instruction arrived*. It fails its "
         "pre-registered gate on both held-out sets, at 0.6B and again at 8B, and is "
-        "demoted\nto future work. Quoted from docs/decisions.md.",
+        "demoted\nto future work. Quoted from docs/07-results.md.",
         fontsize=7.5,
         color="#555",
     )

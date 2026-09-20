@@ -1,4 +1,4 @@
-"""The metric definitions from `docs/technical-doc.md` Part VI, computed over runs.
+"""The metric definitions from `docs/10-research-report.md` Part VI, computed over runs.
 
 One `RunRecord` per (scenario, defense) pair, scored from **world state and verdicts**,
 never from what the agent said it did. The record is what the harness writes to
@@ -214,7 +214,7 @@ def auprc(scores: Sequence[float], labels: Sequence[bool]) -> float | None:
 def ece(scores: Sequence[float], labels: Sequence[bool], bins: int = 10) -> float | None:
     """Expected calibration error: |confidence - observed rate|, weighted by bin size.
 
-    The question `docs/technical-doc.md` Part VI asks of a risk score — does 0.9 really
+    The question `docs/10-research-report.md` Part VI asks of a risk score — does 0.9 really
     mean more dangerous than 0.4? A hand-ordered severity scale is *ordinal*, so a large
     ECE here is the expected reading and not a bug: it says the ordering is informative
     (see `auroc`) while the magnitudes are not yet probabilities. Platt-scaling them

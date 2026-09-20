@@ -3,9 +3,9 @@
     uv run --extra qwen --extra agentdojo --with pyarrow \
         python -m research.experiments.drift_probe.probe [--model Qwen/Qwen3-8B --quant nf4]
 
-Research code (`research/CLAUDE.md`): reproducible and seeded, not a dependency of
-anything. The hypothesis, the gate and the method are in `README.md` beside this file,
-and were written before the first run. `pyarrow` is pulled in for this run only, to read
+Research code: reproducible and seeded, and not a dependency of anything. The
+hypothesis, the gate and the method are in `README.md` beside this file, and were written
+before the first run. `pyarrow` is pulled in for this run only, to read
 the cached WikiText parquet. The project does not depend on it.
 """
 

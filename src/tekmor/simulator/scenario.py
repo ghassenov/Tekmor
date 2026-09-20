@@ -3,7 +3,7 @@
 Scenarios are JSON or YAML: both front ends produce the same `Scenario`, and the
 validation below is the only definition of the format. JSON needs nothing; YAML needs
 PyYAML, which is an optional extra rather than a runtime dependency, so a checkout that
-never touches a `.yaml` scenario still installs nothing. See `docs/decisions.md`.
+never touches a `.yaml` scenario still installs nothing. See `docs/07-results.md`.
 
 A scenario carries metadata the *scorer* needs (`id`, `version`, `benign`, and the
 outcome conditions below) and content the *run* needs (world, policy, steps). Only the
@@ -14,13 +14,13 @@ meaningless.
 **Outcome conditions.** A benign scenario states `success` and an attack scenario states
 `attack_success`: what must be true of *world state* for the user's task to have been
 completed, or the attacker's goal to have been reached. They are the ground truth behind
-BTU and ASR (`docs/technical-doc.md` Part VI), they are checked against the world rather
+BTU and ASR (`docs/10-research-report.md` Part VI), they are checked against the world rather
 than against what the agent said it did, and they are required — a scenario nobody can
 score is a run that produces a number nobody can defend. Each is a list of condition
 maps: within a map every `dotted.path: value` must hold, and the scenario counts if any
 map does, because an injection that asks for two things succeeds by getting either.
 
-**Family and level** place the scenario in the test matrix of `docs/technical-doc.md`
+**Family and level** place the scenario in the test matrix of `docs/10-research-report.md`
 Part VI: one of the seven attack families of Part I, and difficulty 1-5 (local,
 contextual, compositional, adaptive, long-horizon). They are scorer metadata like `id`
 and `benign` — the grid is reported by them — and like those they never reach a defense.
@@ -48,7 +48,7 @@ from tekmor.provenance.trust import TrustLevel
 from tekmor.simulator.domains import DOMAINS
 from tekmor.simulator.world import Document, World
 
-#: The attack families of `docs/technical-doc.md` Part I, which are the rows of the
+#: The attack families of `docs/10-research-report.md` Part I, which are the rows of the
 #: evaluation grid. Fixed rather than free text: a typo in a family name would silently
 #: create a row of its own and split the family it was meant to join.
 FAMILIES = frozenset(

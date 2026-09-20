@@ -2,7 +2,7 @@
 
     uv run python -m evaluation.harness
 
-`docs/technical-doc.md` Part VI. This is the first thing in the repository that produces
+`docs/10-research-report.md` Part VI. This is the first thing in the repository that produces
 a *number*; everything before it produced behaviour. What it does is small on purpose —
 load the scenario matrix, run each scenario under each defense through the ordinary
 `tekmor.runtime.run`, score the finished worlds with `evaluation.metrics`, and write the
@@ -11,7 +11,7 @@ run down well enough that someone else can reproduce it.
 **Raw is write-once.** Each invocation gets its own directory under `results/raw/`
 (decision events, per-run records, and the manifest that says how they were produced),
 and the aggregate lands under `results/processed/`. Analysis never edits raw output; it
-reads it and writes somewhere else (`evaluation/CLAUDE.md`).
+reads it and writes somewhere else (`docs/06-evaluation-methodology.md`).
 
 **Nothing the scorer knows reaches a defense.** The defenses are constructed here from
 the scenario files' *canary values* and nothing else — that registry is the organization's
@@ -94,7 +94,7 @@ def _git(*args: str) -> str:
 
 
 def manifest(scenarios: Iterable[Scenario], names: Sequence[str], directory: Path) -> dict:
-    """Everything needed to say how a result was produced (`evaluation/CLAUDE.md`).
+    """Everything needed to say how a result was produced (`docs/06-evaluation-methodology.md`).
 
     The commit *and* whether the tree was dirty, because a result produced from
     uncommitted edits is not reproducible from the commit alone and should say so

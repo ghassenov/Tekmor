@@ -1,6 +1,6 @@
 """Per-domain policy data, and the deterministic rules evaluated over it.
 
-`docs/technical-doc.md` Part IV and Part VII: the policy engine enforces two rules
+`docs/10-research-report.md` Part IV and Part VII: the policy engine enforces two rules
 before any tool call.
 
 **Trusted-Action** — a sensitive tool may only be driven by inputs whose minimum

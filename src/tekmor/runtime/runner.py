@@ -1,6 +1,6 @@
 """The run loop.
 
-`docs/technical-doc.md` Part I: scenario + world + policy → runner → the agent proposes
+`docs/10-research-report.md` Part I: scenario + world + policy → runner → the agent proposes
 an action → Tekmor decides → escalations go to a simulated human, approved actions go
 to the tool gateway → world state updates → events are logged.
 

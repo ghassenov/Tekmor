@@ -1,6 +1,6 @@
 """Trust levels as integrity labels.
 
-The six levels of `docs/technical-doc.md` Part I form a lattice:
+The six levels of `docs/10-research-report.md` Part I form a lattice:
 
     SYSTEM_POLICY > AUTHENTICATED_USER > TRUSTED_INTERNAL >
     UNTRUSTED_INTERNAL > UNTRUSTED_EXTERNAL > ADVERSARY_CONTROLLED

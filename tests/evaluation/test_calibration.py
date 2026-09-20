@@ -139,5 +139,5 @@ def test_the_matrix_calibration_is_out_of_sample_and_never_reads_the_score_backw
     # none of them inverted it. Anything else and the numbers below it mean nothing.
     assert result.inverted_folds == 0 and result.sound
     # Reported, not claimed. Whether Platt scaling *helps* on seven scenarios is a
-    # finding recorded in docs/decisions.md, not something this test is here to enforce.
+    # finding recorded in docs/07-results.md, not something this test is here to enforce.
     assert result.ece is not None and result.ece_calibrated is not None

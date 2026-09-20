@@ -19,9 +19,10 @@ change state or send something out (`sensitive`) and those whose results only th
 their institution authored (`trusted`). Everything else, including any tool nobody
 listed, is `UNTRUSTED_EXTERNAL`, because unknown provenance must not read as trusted. It
 was written from tool names and docstrings, never from AgentDojo's injection vectors: a
-label chosen because an injection sits there would be the test-awareness `src/CLAUDE.md`
-forbids. **Do not tune it on AgentDojo results** -- that is what keeps AgentDojo held
-out, and a known 20-landing fix was rejected on exactly these grounds.
+label chosen because an injection sits there would be the test-awareness
+`docs/06-evaluation-methodology.md` forbids. **Do not tune it on AgentDojo results** --
+that is what keeps AgentDojo held out, and a known 20-landing fix was rejected on exactly
+these grounds.
 
 Nothing in these suites is labelled confidential and none has a capability lattice, so
 Permitted-Flow and REWRITE are unexercised here; every Trusted-Action violation escalates
@@ -494,7 +495,7 @@ class HFToolCallingLLM(BasePipelineElement):
     """Drives a local model through the tool-calling format it was *trained* on.
 
     `LocalLLM` teaches a bespoke `<function=name>{...}</function>` convention in the
-    system prompt. Measured on Qwen3-8B (`docs/decisions.md`), that model emits a
+    system prompt. Measured on Qwen3-8B (`docs/07-results.md`), that model emits a
     well-formed call on the first turn and then, once a tool result comes back, narrates
     what it intends to do instead of calling anything — the loop sees no tool call and
     ends, so no benign task ever completes.
@@ -600,7 +601,7 @@ def ground_truth_agent(
 ) -> BasePipelineElement:
     """The default: replay ground truth and obey every injection.
 
-    Every recorded AgentDojo number in `docs/decisions.md` was produced through this, so
+    Every recorded AgentDojo number in `docs/07-results.md` was produced through this, so
     it stays the default and stays bit-identical.
     """
     return FooledAgent(executor, user_task, injection_task)

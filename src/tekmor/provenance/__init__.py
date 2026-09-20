@@ -1,6 +1,6 @@
 """Tekmor provenance component: the trust lattice, labelled sources, and taint.
 
-See src/CLAUDE.md.
+See docs/03-architecture.md.
 """
 
 from tekmor.provenance.canary import appears_in, found_in

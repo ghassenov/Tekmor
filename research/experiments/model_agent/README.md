@@ -5,7 +5,7 @@ it needs a served model and a GPU, neither of which is in this repository.**
 
 ## Why this exists
 
-Every AgentDojo entry in `docs/decisions.md` since Phase 4 closes with the same sentence
+Every AgentDojo entry in `docs/07-results.md` since Phase 4 closes with the same sentence
 in some form: *nothing here says what a model-driven agent would do*. The driver
 (`ground_truth_agent`) replays AgentDojo's ground truth and obeys every injection, which
 fixes three things at once:
@@ -106,5 +106,5 @@ it has no analogue in the scripted driver.
 ## What no outcome licenses
 
 No result from this experiment turns a switch on by itself. The switches that are off are
-off for reasons recorded in `docs/decisions.md`, and a utility number from one served
+off for reasons recorded in `docs/07-results.md`, and a utility number from one served
 model is not one of the things that would reopen them.

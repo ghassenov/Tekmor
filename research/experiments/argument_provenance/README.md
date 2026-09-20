@@ -7,7 +7,7 @@ seen go under "Amendments", dated.
 
 ## Why this experiment
 
-AgentDojo produced the project's most important number (`docs/decisions.md`, "AgentDojo:
+AgentDojo produced the project's most important number (`docs/07-results.md`, "AgentDojo:
 the monitor stops what it guards..."). Call-level, prefix-monotone taint makes `tekmor`
 equal to `deny-sensitive` on three suites of four: pooled BTU 44/97 = 0.45 at ASR
 21/583 = 0.04. Endorsement moved that to BTU 0.69 at ASR 0.15. The attacks it let back
@@ -27,7 +27,7 @@ The literature's recent answer is to move the check from the call to the argumen
   graph built from the user's request alone. Reported AgentDojo ASR 40% → 1% at 76% task
   completion.
 - **FIDES** (arXiv:2505.23643) and **CaMeL** (arXiv:2503.18813): data-flow labels at
-  value granularity. `docs/technical-doc.md` Part X lists the argument-level residual as
+  value granularity. `docs/10-research-report.md` Part X lists the argument-level residual as
   research gap 1.
 
 These numbers are the papers' own, measured with models on their configurations. They
@@ -247,7 +247,7 @@ the attack stopped, the benign twin refused. **Neither happened.** The payee is 
 short to trace and falls back to call level. An authority value can be laundered through
 world state: bind it at an unguarded step, then act on an opaque handle. Argument-level
 provenance as implemented here sees only the arguments of the call it is judging, and
-`docs/decisions.md` already records the same shape for the canary scanner ("a value
+`docs/07-results.md` already records the same shape for the canary scanner ("a value
 routed through world state ... is outside it"). PACT's ablation reports that semantic
 roles **and cross-step provenance** are both necessary; this is that ablation, arrived at
 from the other direction.

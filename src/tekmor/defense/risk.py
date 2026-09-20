@@ -55,7 +55,7 @@ ESCALATE_MAX = 0.8  # between that and an unbounded flow or tool violation (0.9,
 def contributions(signals: Signals) -> tuple[tuple[str, float], ...]:
     """Every signal that fired, with its severity, worst first.
 
-    The private half of the explanation (`defense/CLAUDE.md`): the monitor's public
+    The private half of the explanation (`docs/03-architecture.md` §3.7): the monitor's public
     reason codes name the rule that decided, and these name everything that weighed on
     it. Keep them out of anything an attacker reads — a per-signal breakdown is a
     hill-climbing channel.
@@ -84,7 +84,7 @@ def score(signals: Signals) -> float:
 
 
 def band(risk: float) -> Verdict:
-    """The verdict the thresholds map `risk` to (`docs/technical-doc.md` Part XIII).
+    """The verdict the thresholds map `risk` to (`docs/10-research-report.md` Part XIII).
 
     ESCALATE sits *above* REWRITE rather than beside it: both answer a Trusted-Action
     violation, and which one applies is whether a bounded variant exists. Deferring to a

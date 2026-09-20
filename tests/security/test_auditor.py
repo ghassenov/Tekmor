@@ -2,7 +2,7 @@
 that refuses everything pays for it in benign work.
 
 Stub judges stand in for the model: the claims here are about the fusion, not about any
-judge's accuracy, which `evaluation/alignment.py` measures and `docs/decisions.md`
+judge's accuracy, which `evaluation/alignment.py` measures and `docs/07-results.md`
 records. The one test that loads a real model is marked slow.
 """
 

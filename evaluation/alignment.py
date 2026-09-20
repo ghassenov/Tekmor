@@ -4,7 +4,7 @@
     uv run python -m evaluation.alignment [--judge Qwen/Qwen3-0.6B] [--endorse]
         [--dojo [--suites banking] [--limit N]]
 
-`docs/technical-doc.md` Proposal B, *Evaluation*: remove the auditor and see what its
+`docs/10-research-report.md` Proposal B, *Evaluation*: remove the auditor and see what its
 marginal value is, and measure the latency it adds and how far it can be trusted. The
 auditor (`tekmor.defense.auditor`) only ever raises a verdict, so its row can differ
 from `tekmor`'s in one of two directions only: attacks it stops, and benign work it

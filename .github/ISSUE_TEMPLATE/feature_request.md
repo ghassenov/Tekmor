@@ -13,7 +13,7 @@ labels: enhancement
 
 ## Relation to the documented architecture
 
-<!-- How this fits docs/technical-doc.md, and whether it deviates from it. -->
+<!-- How this fits docs/10-research-report.md, and whether it deviates from it. -->
 
 ## Alternatives considered
 

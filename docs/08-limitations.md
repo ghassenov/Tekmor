@@ -1,4 +1,4 @@
-# Limitations
+# 8. Limitations
 
 What the numbers in this repository do not support, and what is known to be broken.
 
@@ -101,8 +101,9 @@ the earlier sample could support. The scale in use is still the hand-ordered one
 
 ## Mechanisms built but deliberately off
 
-Three mechanisms work, were measured, and are disabled. Reading the entry in
-`decisions.md` before flipping any of them is not optional.
+Three mechanisms work, were measured, and are disabled. Reading
+[7.6](07-results.md#76-mechanisms-built-and-deliberately-switched-off) before flipping any
+of them is not optional.
 
 | Mechanism | Why it is off |
 |---|---|

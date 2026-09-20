@@ -1,6 +1,6 @@
 """The adaptive attacker: that it searches what it may and sees what it may, and what it found.
 
-The measured claims pinned here are the ones in `docs/decisions.md`: the keyword filter
+The measured claims pinned here are the ones in `docs/07-results.md`: the keyword filter
 falls to the climb, the monitor's ASR does not move across rounds, and the one form that
 would beat `tekmor+canary` is exactly the one the ground truth cannot credit.
 """
