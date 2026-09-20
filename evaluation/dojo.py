@@ -25,13 +25,16 @@ not a comparison with CaMeL, FIDES or any number reported with a real model. Its
 only whether the policy would have permitted the oracle trace, and its provenance is
 near-oracle because the script copies values verbatim.
 
-`model` drives an OpenAI-compatible endpoint through AgentDojo's own pipeline, with
+`model` and `hf` drive a real model through AgentDojo's own pipeline, with
 `TekmorExecutor` in `ToolsExecutor`'s slot — the substitution this module always claimed
 a model-driven pipeline would make unchanged. Every caveat above is what it removes: the
 model may ignore an injection, may fail a benign task unaided (so the `allow-all` row is
 the ceiling that separates a defense's cost from the model's own), and may react to a
 verdict, because a refusal returns an error naming the public reason codes and the loop
-feeds it back. It needs a served model and a GPU; neither is in this repository.
+feeds it back. `model` expects an OpenAI-compatible endpoint; `hf` loads a local
+Transformers model into this process instead (`HFChatClient`), which is what a Colab GPU
+runtime can do without standing up a server. Both need a GPU, which is not in this
+repository.
 
 **What Tekmor is told about AgentDojo is deployment configuration, written per suite
 from what each tool returns** (`SUITES`). `trusted` lists the tools whose results only
@@ -54,6 +57,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from agentdojo.agent_pipeline import (
@@ -402,6 +406,102 @@ class DojoRecord:
 Agent = Callable[[TekmorExecutor, BaseUserTask, "BaseInjectionTask | None"], BasePipelineElement]
 
 
+class HFChatClient:
+    """An OpenAI-shaped client backed by a local Transformers model, for `LocalLLM`.
+
+    `LocalLLM` wants `client.chat.completions.create(...)` and reads
+    `.choices[0].message.content`. Serving that from a model already in this process is
+    the smallest way to run a model-driven agent where there is a GPU but no server:
+    AgentDojo's own tool-calling prompt and its own output parser are used unchanged,
+    because `LocalLLM` itself is unchanged. The alternative — standing up vLLM — buys
+    throughput this project does not need and a Turing-era compatibility problem it does
+    not want.
+
+    Decoding is greedy and the `seed` `LocalLLM` sends is ignored, so a rerun with the
+    same model, dtype and device gives the same tokens. `temperature` and `top_p` are
+    accepted and ignored for the same reason; the manifest records greedy decoding
+    rather than the values.
+
+    Transformers and torch are the `qwen` extra, imported in `load()`.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        quant: str | None = None,
+        dtype: str = "float16",
+        max_new_tokens: int = 512,
+    ) -> None:
+        self.model_id = model_id
+        self.quant = quant
+        self.dtype = dtype
+        self.max_new_tokens = max_new_tokens
+        self.model: Any = None
+        self.tokenizer: Any = None
+        #: Completions that came back empty. An empty string parses as "no tool calls",
+        #: which ends a run and is indistinguishable from an agent that gave up, so it
+        #: is counted and reported rather than left to look like a result.
+        self.empty = 0
+        self.calls = 0
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def load(self) -> None:
+        if self.model is not None:
+            return
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ModuleNotFoundError:
+            raise RuntimeError(
+                "the model agent needs transformers and torch: --extra qwen"
+            ) from None
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        if self.quant == "nf4":
+            from transformers import BitsAndBytesConfig
+
+            config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=getattr(torch, self.dtype),
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, quantization_config=config, device_map="auto"
+            )
+        elif self.quant is None:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, dtype=getattr(torch, self.dtype), device_map="auto"
+            )
+        else:
+            raise ValueError(f"unknown quantization {self.quant!r}")
+        self.model.eval()
+
+    def _create(self, *, model: str, messages: Sequence[Mapping[str, Any]], **_: Any) -> Any:
+        import torch
+
+        self.load()
+        try:
+            prompt = self.tokenizer.apply_chat_template(
+                list(messages), tokenize=False, add_generation_prompt=True, enable_thinking=False
+            )
+        except TypeError:  # a template without Qwen3's thinking switch
+            prompt = self.tokenizer.apply_chat_template(
+                list(messages), tokenize=False, add_generation_prompt=True
+            )
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        with torch.no_grad():
+            generated = self.model.generate(
+                **inputs, max_new_tokens=self.max_new_tokens, do_sample=False
+            )
+        text = self.tokenizer.decode(
+            generated[0][inputs["input_ids"].shape[-1] :], skip_special_tokens=True
+        )
+        self.calls += 1
+        if not text.strip():
+            self.empty += 1
+        message = SimpleNamespace(content=text)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
 def ground_truth_agent(
     executor: TekmorExecutor, user_task: BaseUserTask, injection_task: BaseInjectionTask | None
 ) -> BasePipelineElement:
@@ -629,6 +729,72 @@ def table(rows: Sequence[DojoMetrics]) -> str:
     return "\n".join(lines)
 
 
+def add_agent_args(parser: argparse.ArgumentParser) -> None:
+    """The flags that choose what drives a run, shared by every driver that has one."""
+    parser.add_argument(
+        "--agent",
+        choices=["ground-truth", "model", "hf"],
+        default="ground-truth",
+        help="'model' drives an OpenAI-compatible endpoint, 'hf' a local Transformers model",
+    )
+    # Explicitly `agent_`-named: a driver may also load a *judge* model, and two models
+    # in one command line must not share a --model or a --dtype.
+    parser.add_argument(
+        "--agent-model", default=None, help="model id: served, or a HF repo for 'hf'"
+    )
+    parser.add_argument(
+        "--agent-base-url",
+        default="http://localhost:8000/v1",
+        help="OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama)",
+    )
+    parser.add_argument("--agent-quant", choices=["nf4"], default=None, help="'hf': 4-bit, GPU")
+    parser.add_argument("--agent-dtype", default="float16", help="'hf' only; float16 on a T4")
+    parser.add_argument("--agent-max-new-tokens", type=int, default=512, help="'hf' only")
+    parser.add_argument("--agent-max-iters", type=int, default=15, help="tool-loop turns per run")
+
+
+def agent_from_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> tuple[Agent, Any]:
+    """The agent the flags ask for, and the client behind it (None for ground truth).
+
+    The client is returned so the caller can record what it cost and how often it came
+    back empty: an empty completion parses as "no tool calls" and ends a run, which is
+    indistinguishable from an agent that finished.
+    """
+    if args.agent == "ground-truth":
+        return ground_truth_agent, None
+    if not args.agent_model:
+        parser.error(f"--agent {args.agent} needs --agent-model")
+    if args.agent == "hf":
+        client: Any = HFChatClient(
+            args.agent_model, args.agent_quant, args.agent_dtype, args.agent_max_new_tokens
+        )
+    else:
+        import openai
+
+        client = openai.OpenAI(base_url=args.agent_base_url, api_key="none")
+    # Temperature 0 and a pinned model id: the run has to be repeatable, and a sampled
+    # agent would make every number a sample of one.
+    return (
+        model_agent(LocalLLM(client, args.agent_model, temperature=0.0), args.agent_max_iters),
+        client,
+    )
+
+
+def _agent_description(args: argparse.Namespace) -> str:
+    """What drove the run, in the manifest, in enough detail to read a number by."""
+    if args.agent == "ground-truth":
+        return "scripted: user ground truth, then injection ground truth"
+    where = (
+        f"local transformers, quant {args.agent_quant}, dtype {args.agent_dtype}"
+        if args.agent == "hf"
+        else f"served at {args.agent_base_url}"
+    )
+    return (
+        f"model: {args.agent_model} ({where}), greedy decoding, "
+        f"max_iters {args.agent_max_iters}, AgentDojo's default system message"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--suites", nargs="+", default=list(SUITES), choices=list(SUITES))
@@ -653,39 +819,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="vouch per field of a tool result, not per result (TaintTracker.field_labels)",
     )
-    parser.add_argument(
-        "--agent",
-        choices=["ground-truth", "model"],
-        default="ground-truth",
-        help="'model' drives an OpenAI-compatible endpoint instead of replaying ground truth",
-    )
-    parser.add_argument("--model", default=None, help="model id served at --base-url")
-    parser.add_argument(
-        "--base-url",
-        default="http://localhost:8000/v1",
-        help="OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama)",
-    )
-    parser.add_argument("--max-iters", type=int, default=15, help="tool-loop turns per run")
+    add_agent_args(parser)
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
 
-    if args.agent == "model":
-        if not args.model:
-            parser.error("--agent model needs --model")
-        import openai
-
-        # Temperature 0 and a pinned model id: the run has to be repeatable, and a
-        # sampled agent would make every number a sample of one.
-        agent = model_agent(
-            LocalLLM(
-                openai.OpenAI(base_url=args.base_url, api_key="none"),
-                args.model,
-                temperature=0.0,
-            ),
-            args.max_iters,
-        )
-    else:
-        agent = ground_truth_agent
+    agent, client = agent_from_args(args, parser)
 
     records = evaluate(
         args.suites,
@@ -705,7 +843,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         + ["endorsed"] * args.endorse
         + ["targets"] * args.endorse_targets
         + ["fields"] * args.field_labels
-        + ["model"] * (args.agent == "model")
+        + ["model"] * (args.agent != "ground-truth")
     )
     raw = args.results / "raw" / f"{stamp}-{tag}"
     processed = args.results / "processed" / f"{stamp}-{tag}"
@@ -726,12 +864,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "git_dirty": bool(_git("status", "--porcelain")),
                 "agentdojo_version": version("agentdojo"),
                 "benchmark_version": VERSION,
-                "agent": (
-                    f"model: {args.model} at {args.base_url}, temperature 0, "
-                    f"max_iters {args.max_iters}, AgentDojo's default system message"
-                    if args.agent == "model"
-                    else "scripted: user ground truth, then injection ground truth"
-                ),
+                "agent": _agent_description(args),
+                "agent_empty_completions": getattr(client, "empty", None),
+                "agent_completions": getattr(client, "calls", None),
                 "attack": "direct",
                 "approver": "deny",
                 "suites": args.suites,
