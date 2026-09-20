@@ -74,6 +74,14 @@ per-suite `sensitive`/`trusted` configuration is deployment input, frozen: do no
 on AgentDojo results, because AgentDojo is the held-out set. Results land under
 `results/{raw,processed}/<stamp>-agentdojo/`.
 
+`--agent` picks the driver, and the manifest records which one ran. `ground-truth` is the
+default and produced every recorded number: it replays AgentDojo's ground truth and obeys
+every injection, so its ASR is the always-obeys bound and its BTU asks only whether the
+policy would have permitted the oracle trace. `model` drives an OpenAI-compatible
+endpoint through AgentDojo's own pipeline, with `TekmorExecutor` in `ToolsExecutor`'s
+slot, and needs a served model and a GPU. **Numbers from the two drivers measure
+different things and never belong in one table.**
+
 ## Layout
 
 ```
