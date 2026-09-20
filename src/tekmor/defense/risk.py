@@ -1,32 +1,21 @@
-"""Risk scoring: one number per candidate action, from the signals the decision used.
+"""Risk scoring: one number per action, from the same signals the decision used.
 
-`docs/technical-doc.md` Part IV stage 3 and Part VI. The deterministic rules already
-answer *what to do*; a score answers *how bad this looked*, which the rules throw away.
-Three things need it: the calibration metrics the evaluation design asks for
-(precision/recall, AUROC, ECE — a verdict cannot be calibrated, only a score can), the
-"ambiguous" band a secondary sensor would arbitrate (Proposal B), and a trace a reader
-can sort.
+**The score decides nothing, and that is the design** (`docs/architecture.md`). A
+weighted sum that could overrule a rule would replace a policy anyone can audit with
+weights nobody can -- weights tuned by the same person who writes the scenarios.
 
-**The score decides nothing, and that is the design.** `ReferenceMonitor` reaches its
-verdict from the rules in their fixed order; the score is computed from the same
-`Signals` object and reported alongside. A weighted sum that could *overrule* a rule
-would replace a policy anyone can audit with weights nobody can, and the weights would
-be tuned by the same person who writes the scenarios.
+So `band()` is not a threshold that fires. It states the doc's table (low->ALLOW,
+medium->REWRITE, ambiguous->ESCALATE, high->BLOCK) as a *falsifiable claim about the
+rules*: for every action the monitor decides, `band(score(signals))` must equal the
+verdict the rules produced. `tests/security/test_risk_bands.py` asserts that across the
+whole matrix, so the day a rule and the score disagree a test says so, rather than a
+dashboard quietly showing risk 0.1 beside a BLOCK.
 
-What the thresholds are for, then: `band()` is the doc's threshold table
-(low→ALLOW, medium→REWRITE, ambiguous→ESCALATE, high→BLOCK) stated as a *falsifiable
-claim about the rules* — for every action the monitor decides, `band(score(signals))`
-must equal the verdict the rules produced. `tests/security/test_risk_bands.py` asserts
-that over the whole scenario matrix, so the day a rule and the score disagree, a test
-says so instead of a dashboard quietly showing risk 0.1 next to a BLOCK.
-
-**Severities are ordinal, not probabilities.** `SEVERITY` orders the violations by how
-much of the blast radius each one covers, and the score is the *worst* one that fired —
-not a sum, because two independent violations do not make an action twice as dangerous,
-and a sum would let several small signals outrank an exfiltration. Whether these
-severities are *calibrated* (does 0.9 mean nine runs in ten are compromised?) is exactly
-what ECE measures, and the answer for a hand-ordered scale is expected to be poor; the
-number is reported rather than claimed (`evaluation/metrics.py`).
+**Severities are ordinal, not probabilities.** The score is the *worst* violation that
+fired, never a sum: two independent violations do not make an action twice as dangerous,
+and a sum would let several small signals outrank an exfiltration. Whether the scale is
+*calibrated* is what ECE measures, and for a hand-ordered scale the answer is expected to
+be poor -- so the number is reported, not claimed.
 """
 
 from __future__ import annotations

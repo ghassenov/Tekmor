@@ -1,243 +1,189 @@
 # Tekmor
 
-**Designing a Measurable Safety Layer for Tool-Using LLM Agents**
+**A measurable safety layer for tool-using LLM agents.**
 
-*Tekmor* (τέκμωρ): "sign, token, proof." The project's core principle is that untrusted
-content is **evidence, not authority**, and that every safety decision must be provable
-from its trace.
+*τέκμωρ — "sign, token, proof".*
 
-> **Status: foundation.** This repository contains the technical research report, the
-> engineering standards, and the implementation so far: the decision contract every
-> defense implements, a fail-closed mediation point, the trust lattice and taint
-> propagation, the policy engine and the reference monitor with its capability
-> downgrade, the encoding-aware canary scanner, the three baselines (allow-all,
-> deny-sensitive, keyword), the append-only JSONL event log, the three-domain simulator
-> with its scenario format, the runtime (scripted and Qwen3-8B adapters, run loop, tool
-> gateway), the risk score and its calibration metrics, and the evaluation harness that
-> scores all of it. The numbers below come from this repository's own seven-scenario
-> matrix, which is not a benchmark, and no external benchmark, robustness variant or
-> adaptive attacker has been run.
+Tekmor sits between an LLM agent and the tools it can call. Every candidate tool call is
+checked against where its influences came from, and allowed, blocked, deferred to a human,
+or rewritten into something less dangerous. Its guiding principle is one sentence:
 
-## What this is
+> **Untrusted content is evidence, not authority.**
 
-Tekmor is designed as an **action-centric reference monitor** for tool-using LLM agents,
-not a prompt-injection classifier. Every candidate tool call passes through a decision
-point that returns **ALLOW / BLOCK / ESCALATE / REWRITE** based on provenance, trust,
-action risk, and policy.
+An agent may *read* a hostile email, a poisoned invoice or an attacker-controlled web
+page. What that content is not allowed to do is *authorise* a consequential action.
 
-The reasoning behind that choice, with citations, is in
-[`docs/technical-doc.md`](docs/technical-doc.md): text-only detection defenses are
-bypassed by adaptive attackers, while system-level designs that constrain *what actions
-untrusted data can trigger* bound the blast radius regardless of whether the model was
-fooled.
+---
 
-## High-level architecture (planned)
+## The problem
+
+Tool-using agents read from places their user does not control — inbound mail, web pages,
+documents, API results, their own memory — and they can also spend the user's authority:
+send money, share files, delete records. Those two capabilities meet inside one context
+window, so text that was merely *read* can end up *instructing*. This is indirect prompt
+injection, and it is a confused-deputy problem.
+
+The common answer is a classifier that tries to spot malicious text. The literature is
+consistent that this does not hold: adaptive attackers reach over 50% success against
+eight published defenses in one study, and over 90% against all twelve in another.
+Rephrase, encode, translate — the classifier misses.
+
+Tekmor takes the other route. It never asks *"is this text malicious?"* It asks *"given
+everything that influenced this call, is this call permitted?"* — a question rewording
+does not change.
+
+## What that buys
+
+![Scenario matrix: attack success, benign utility and false blocks](assets/matrix-baselines.png)
+
+On the internal scenario matrix — 26 scenarios, seven attack families, difficulty levels
+1–5 — Tekmor completes **every** benign task with a **zero** false-block rate, while
+bringing attack success from 1.00 to 0.06. The only baseline with comparable security,
+`deny-sensitive`, reaches it by completing 12% of the work and falsely blocking a quarter
+of all benign actions.
+
+That second half matters as much as the first. A security layer that blocks legitimate
+work gets switched off, so **false-block rate is a headline metric** and roughly a third
+of the test matrix is benign work that merely *looks* alarming.
+
+## Which part actually works
+
+![Ablations: attack success rate with one input removed](assets/ablations.png)
+
+Ablations remove one input at a time. **Provenance carries the result**: without it, 94%
+of attacks land. This is measured, not asserted — and it is the kind of claim a project
+should be able to make about itself before asking anyone to trust it.
+
+## Under adaptive attack
+
+![Adaptive attacker: ASR per round](assets/adaptive-attacker.png)
+
+An attacker that hill-climbs over encodings, rewordings and read order — seeing the
+verdicts and public reason codes, as a real attacker would — breaks the keyword filter
+within five rounds and does not move the monitor across fifty.
+
+## The honest picture
+
+![AgentDojo: benign utility against attack success](assets/agentdojo-frontier.png)
+
+On [AgentDojo](https://arxiv.org/abs/2406.13352) — someone else's tasks, injections and
+checks — the result is harder. Call-level taint over-taints: benign utility falls to 0.45,
+matching `deny-sensitive` on three suites of four. Every mechanism tried since has been a
+**trade** rather than a dominance, and each is recorded as such.
+
+Two further results are worth knowing before reading anything else here:
+
+- **An LLM "alignment judge" added essentially nothing.** Running the same mechanism with
+  no judge at all — refuse every ambiguous action, ask nobody — reproduced both GPU judges
+  almost exactly. Their entire measurable contribution was 2–4 benign runs out of 97.
+- **The activation-drift probe failed its pre-registered gate twice**, at 0.6B and again at
+  8B. It learned that *external text arrived*, not that *an instruction arrived*.
+
+**And the standing caveat:** every AgentDojo number in this repository came from a driver
+that replays ground truth and obeys every injection. ASR is therefore an *always-obeys
+upper bound*, not a measurement, and none of it is comparable with CaMeL, FIDES or Task
+Shield. The attempt to remove that confound with a real model has not yet produced a valid
+run. See [limitations.md](docs/limitations.md) — it is the most important document here.
+
+## How it works, briefly
+
+Every tool call passes through one function:
+
+```python
+Defense.decide(state, action, provenance, policy) -> Decision
+```
+
+returning **ALLOW**, **BLOCK**, **ESCALATE** (defer to a human) or **REWRITE** — a
+least-privilege downgrade along a capability lattice, where `send_email` becomes
+`draft_email` and `execute_payment` becomes `prepare_payment`. The task keeps moving; the
+irreversible effect is removed.
+
+![Tekmor decision flow](assets/decision-flow.svg)
+
+Trust is a six-level lattice from `SYSTEM_POLICY` down to `ADVERSARY_CONTROLLED`. An
+action's integrity is the *lowest* trust among everything that influenced it, and unknown
+provenance is never treated as trusted. Reason codes are the literal predicates that
+fired, so an explanation cannot disagree with the decision it explains.
+
+![Trust lattice, and integrity as the meet](assets/trust-lattice.svg)
+
+## Documentation
+
+| Document | What is in it |
+|---|---|
+| [architecture.md](docs/architecture.md) | The reference monitor, the four verdicts, how a decision is computed |
+| [threat-model.md](docs/threat-model.md) | The adversary, the seven attack families, what is out of scope |
+| [provenance.md](docs/provenance.md) | The trust lattice, taint propagation, endorsement, finer granularity |
+| [evaluation.md](docs/evaluation.md) | Metrics, baselines, the two evaluation surfaces, pre-registration |
+| [results.md](docs/results.md) | Every measured result, with figures |
+| [limitations.md](docs/limitations.md) | **What the numbers do not support.** Read this one. |
+| [technical-doc.md](docs/technical-doc.md) | The authoritative research report: threat model, literature, roadmap |
+| [decisions.md](docs/decisions.md) | Append-only log of every decision and result, with its caveats |
+
+Research experiments live in `research/experiments/`, each with a pre-registration
+committed *before* its first run.
+
+## Quickstart
+
+Python 3.12+, managed with [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync --all-extras
+uv run pytest                              # unit, integration, security, evaluation
+uv run ruff check . && uv run ruff format .
+
+uv run python -m evaluation.harness        # the scenario matrix
+uv run python -m evaluation.ablations      # remove one input at a time
+uv run python -m evaluation.adaptive       # the hill-climbing attacker
+uv run python -m evaluation.dojo           # AgentDojo (needs the agentdojo extra)
+```
+
+Runtime dependencies are **empty by design**. Everything optional is an extra, imported
+inside the component that needs it: `yaml` for YAML scenarios, `qwen` for the local model
+adapter, `agentdojo` for external validation, `docs` for regenerating figures.
+
+To regenerate the figures in `assets/`:
+
+```bash
+uv sync --extra docs
+uv run python assets/figures.py
+```
+
+## Repository layout
 
 ```
-observation ─▶ [trust tagger] ─▶ [taint store: memory + tool-output fields]
-                                          │
-                     candidate action ────┤
-                                          ▼
-                    [policy engine: Trusted-Action + Permitted-Flow + least privilege]
-                                          │  risk score + reason codes
-                                          ▼
-              ALLOW ── REWRITE (capability downgrade) ── ESCALATE ── BLOCK
-                                          │
-                                          ├─▶ tool gateway ─▶ world state
-                                          ▼
-                          append-only JSONL event + provenance graph edge
-```
-
-Six trust levels form a lattice used as integrity labels:
-
-```
-SYSTEM_POLICY > AUTHENTICATED_USER > TRUSTED_INTERNAL >
-UNTRUSTED_INTERNAL > UNTRUSTED_EXTERNAL > ADVERSARY_CONTROLLED
-```
-
-The design direction is **Proposal A** (deterministic information-flow reference monitor)
-as the core, with a task-alignment auditor (Proposal B) and an activation-delta drift
-probe (Proposal C) as research extensions gated on the core being stable. See
-`docs/technical-doc.md` for all three and their tradeoffs.
-
-## Repository structure
-
-```
-src/tekmor/       implementation
-  defense/        Defense interface, signals, risk scoring, decision + rewrite
-  provenance/     trust lattice, taint propagation
-  policy/         declarative policies and the policy engine
-  observability/  event schema, append-only JSONL log, trace + provenance graph
-  simulator/      synthetic world, typed tools, canary secrets, scenario format
-  runtime/        ModelAdapter (mock + Qwen3-8B), runner, tool gateway
+src/tekmor/       the implementation
+  defense/        decision contract, signals, risk scoring, monitor, rewrite, canary, auditor
+  provenance/     trust lattice, taint propagation, endorsement, canary matcher
+  policy/         declarative per-domain policies and their predicates
+  observability/  event schema, append-only JSONL log, timeline and provenance graph
+  simulator/      three synthetic worlds, typed tools, canary secrets, scenario format
+  runtime/        model adapters, the run loop, the tool gateway
 tests/            unit / integration / security / evaluation
-evaluation/       scenarios (the matrix), harness, metrics, generated results
-research/         literature, hypotheses, research experiments, notes
-docs/             project documentation; technical-doc.md is authoritative,
-                  decisions.md is the append-only decision log
-.github/          PR template, issue templates, CI
+evaluation/       scenarios, harness, metrics, ablations, variants, adaptive, AgentDojo
+research/         literature, hypotheses, pre-registered experiments
+notebooks/        Colab notebooks for the runs that need a GPU
+assets/           documentation figures and the script that regenerates them
+docs/             project documentation
 ```
 
-Each of these directories has a `CLAUDE.md` with rules scoped to it; the root
-[`CLAUDE.md`](CLAUDE.md) holds the project-wide engineering standards.
+## Project status
 
-## Setup
+The five roadmap phases are complete and the work now is measurement. The decision core,
+policy engine, provenance and taint propagation, canary scanner, simulator, observability
+and the evaluation harness are implemented and tested; the scenario matrix, robustness
+variants, ablations, the adaptive attacker and AgentDojo all run.
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Several mechanisms are **built, measured and deliberately switched off** — argument-level
+provenance, field-level labels, the alignment auditor. The reasons are recorded in
+[decisions.md](docs/decisions.md), and in at least one case the reason is methodological
+rather than numerical: a fix diagnosed on a held-out benchmark cannot be adopted on that
+benchmark's own numbers.
 
-```bash
-git clone git@github.com:ghassenov/Tekmor.git
-cd Tekmor
-uv sync --dev
-cp .env.example .env    # then fill in; .env is gitignored
-```
-
-The package has no runtime dependencies. Two optional extras exist, each imported only
-by the component that needs it:
-
-```bash
-uv sync --extra yaml    # PyYAML, for YAML scenario files (JSON needs nothing)
-uv sync --extra qwen    # Transformers + torch, for the Qwen3-8B adapter
-```
-
-The scripted model backend is the default, so nothing so far requires a GPU or an API
-key.
-
-## Evaluation
-
-```bash
-uv run python -m evaluation.harness
-```
-
-Every scenario in `evaluation/scenarios/` runs under every defense; the run writes raw
-decision events, per-run records and a manifest (commit, environment, input hashes) to
-`evaluation/results/raw/<timestamp>/`, and the aggregate to `results/processed/`. Runs
-are deterministic: the scripted adapter replays the scenario's steps and the simulated
-human denies every escalation.
-
-It also writes a `timeline.html` beside the decision log — the security timeline and the
-provenance graph, rendered from the JSONL and nothing else. Open it to watch hostile
-content flow toward a sensitive call and see the edge cut where the monitor stopped it.
-Any log renders on its own:
-
-```bash
-uv run python -m tekmor.observability.viewer evaluation/results/raw/<timestamp>/decisions.jsonl
-```
-
-Measured on the seven-scenario matrix in this repository (three domains, benign and
-attack halves), scripted adapter, reproduced by the command above:
-
-| defense | BTU | ASR | CVR | FBR | UER |
-|---|---|---|---|---|---|
-| allow-all | 1.00 | 1.00 | 0.43 | 0.00 | n/a |
-| deny-sensitive | 0.00 | 0.00 | 0.00 | 0.50 | n/a |
-| keyword | 1.00 | 0.75 | 0.14 | 0.00 | n/a |
-| tekmor | 1.00 | 0.25 | 0.14 | 0.00 | 0.00 |
-| tekmor+canary | 1.00 | 0.00 | 0.00 | 0.00 | 0.00 |
-
-Per *action* rather than per run: did the defense flag the actions that reach the
-attacker's goal, and does its risk score rank them above the rest? The label is derived
-by replaying each scenario prefix undefended, so it is the same under every row. AUROC,
-AUPRC and ECE are null for a defense that reports no score. `chance` is the share of
-scored actions that are unsafe — the line AUPRC has to beat, and the reason AUPRC is
-printed next to it rather than alone.
-
-| defense | precision | recall | F1 | AUROC | AUPRC | chance | ECE |
-|---|---|---|---|---|---|---|---|
-| allow-all | n/a | 0.00 | n/a | n/a | n/a | n/a | n/a |
-| deny-sensitive | 0.40 | 1.00 | 0.57 | n/a | n/a | n/a | n/a |
-| keyword | 0.50 | 0.50 | 0.50 | n/a | n/a | n/a | n/a |
-| tekmor | 0.60 | 0.75 | 0.67 | 0.83 | 0.74 | 0.19 | 0.11 |
-| tekmor+canary | 0.67 | 1.00 | 0.80 | 0.99 | 0.95 | 0.19 | 0.07 |
-
-Precision is the row to read carefully: the label marks the step that *reaches* the
-attacker's goal, so an intervention earlier in the same injected chain counts against
-precision even though it is what stopped the attack. Both of `tekmor`'s false positives
-are that case, and none of them is a benign action (FBR is 0.00).
-
-Is the risk score a *probability*, or only a ranking? `evaluation/calibration.py`
-Platt-scales it leave-one-scenario-out — fit on six scenarios, score the seventh, repeat
-— and reports the raw and calibrated numbers over the same held-out actions. The answer
-here is a negative result, reported rather than tuned away:
-
-| defense | ECE | ECE' | Brier | Brier' | AUROC | AUROC' | folds | n |
-|---|---|---|---|---|---|---|---|---|
-| tekmor | 0.11 | 0.12 | 0.09 | 0.10 | 0.83 | 0.75 | 7 | 21 |
-| tekmor+canary | 0.07 | 0.10 | 0.04 | 0.04 | 0.99 | 0.99 | 7 | 21 |
-
-Calibrating makes it slightly *worse*. Twenty-one scored actions, four of them positive,
-is not enough to fit a sigmoid: `tekmor`'s AUROC moving 0.83 → 0.75 across folds measures
-exactly how far the fit travels when one scenario is swapped out. The hand-ordered
-ordinal scale stays in use, and CALIB-RISK needs the larger matrix before its claim can
-be tested rather than merely computed.
-
-Read it as a sanity check on the mechanism, not as a result about prompt injection in
-general: seven scenarios, scripted agents, and attacks written by the same person who
-wrote the defense. The one attack `tekmor` misses is the mislabelled-secret scenario —
-the argument-level residual a provenance rule cannot see — and the row below it is what
-closes it. `deny-sensitive` is the reminder that ASR alone justifies nothing: it stops
-every attack by stopping half the benign actions too.
-
-## Development workflow
-
-`main` is protected: pull requests are required, force-pushes and deletions are blocked,
-and CI must pass. Never commit directly to `main`.
-
-```bash
-git checkout -b feat/<short-description>
-# work, then:
-uv run ruff format . && uv run ruff check . && uv run pytest
-git commit          # Conventional Commits: feat(defense): ...
-git push -u origin feat/<short-description>
-gh pr create        # uses .github/pull_request_template.md
-```
-
-Branch prefixes: `feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `research/`, `chore/`,
-`perf/`, `security/`.
-
-## Testing
-
-```bash
-uv run pytest                  # everything except tests needing a real model
-uv run pytest tests/security   # adversarial tests
-uv run pytest -m slow          # tests needing a real model backend or a GPU
-```
-
-The model-backed tests load `Qwen/Qwen3-8B` by default. `TEKMOR_QWEN_MODEL` overrides it
-(`TEKMOR_QWEN_MODEL=Qwen/Qwen3-0.6B uv run pytest -m slow` exercises the adapter on CPU),
-which checks the adapter, not the reference agent.
-
-Test categories and their rules are in [`tests/CLAUDE.md`](tests/CLAUDE.md). Security
-tests must include both attacks and benign hard negatives — a defense that blocks
-everything is a failure, so false-block rate is a headline metric.
-
-## Planned evidence
-
-The metrics above are the ones defined in `docs/technical-doc.md` Part VI; AUPRC,
-intervention latency and blast radius are still unimplemented. What is missing is not a
-metric but evidence: paraphrase, encoding and adaptive-attacker variants of every
-scenario, the ablation grid, a model-driven agent instead of the scripted one, and
-[AgentDojo](https://agentdojo.spylab.ai) as external validation.
-
-Evaluation rules — reproducibility, versioned scenarios, baselines, raw/processed
-separation, and no hand-edited results — are in
-[`evaluation/CLAUDE.md`](evaluation/CLAUDE.md).
-
-## Research workflow
-
-Literature notes, hypotheses, and exploratory experiments live in `research/`, under the
-rules in [`research/CLAUDE.md`](research/CLAUDE.md): explicit falsifiable hypotheses, real
-citations, recorded negative results, and a clear separation between observation and
-interpretation. Results are never fabricated, and claims are labelled **implemented /
-tested / observed / hypothesized / planned / inferred**.
-
-## Contributing
-
-Open an issue using one of the templates in `.github/ISSUE_TEMPLATE/` (bug, feature,
-research, security), then work on a branch and open a PR. The PR template asks for
-security, research, and observability implications along with known limitations — filling
-those in honestly is part of the contribution.
+This is research code. Results on this repository's own scenarios are only as convincing
+as the scenarios are hard and independent of the defense's design, which is why AgentDojo
+is here and why [limitations.md](docs/limitations.md) is written the way it is.
 
 ## License
 
-[MIT](LICENSE).
+MIT. See [LICENSE](LICENSE).

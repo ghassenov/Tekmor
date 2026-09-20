@@ -3,50 +3,29 @@
     uv sync --extra agentdojo
     uv run python -m evaluation.dojo [--suites banking slack] [--limit N]
 
-`docs/technical-doc.md` Part VII: AgentDojo is the external harness with a clean defense
-plug-in and a matching threat model, and results on it are the strongest guard against
-designing the defense around this repository's own scenarios. The suites, the tasks,
-the injections and the utility and security checks are all AgentDojo's. What Tekmor
-supplies is `TekmorExecutor`, a pipeline element that replaces AgentDojo's
-`ToolsExecutor`: every tool call becomes an `Action`, goes through `mediate()` with the
-run's taint as its provenance, and executes only as `gateway.permitted` allows.
+Tekmor enters as `TekmorExecutor`, replacing AgentDojo's `ToolsExecutor`: every tool call
+becomes an `Action`, is decided by `mediate()`, and executes only as the gateway allows.
+`docs/evaluation.md` covers what this measures; `docs/limitations.md` covers what it does
+not. Two points belong here because they govern how the code is read and changed.
 
-**Two agents, and which one ran decides what the numbers mean.** `--agent` selects it and
-the manifest records it.
+**Which agent ran decides what the numbers mean.** `--agent ground-truth` (the default,
+and every recorded number) replays the oracle trace and obeys every injection, so ASR is
+an *always-obeys bound* and BTU asks only whether the policy would have permitted that
+trace. `--agent model` / `hf-native` drive a real model. **Numbers from the two never
+belong in one table.**
 
-`ground-truth` (the default, and every recorded number in `docs/decisions.md`) replays
-AgentDojo's own ground truth. A benign run is the user task's ground-truth calls. An
-attacked run is those calls, made in the environment AgentDojo's `direct` attack
-injected, and then the injection task's ground-truth calls: an agent that did the user's
-work, read the injection and obeyed it. That is this repository's scripted adapter on
-someone else's benchmark. It measures what the monitor stops, never whether a model would
-be fooled in the first place, so ASR there is the *undefended-agent-always-obeys* bound,
-not a comparison with CaMeL, FIDES or any number reported with a real model. Its BTU asks
-only whether the policy would have permitted the oracle trace, and its provenance is
-near-oracle because the script copies values verbatim.
+**The per-suite configuration is frozen deployment input.** `SUITES` lists the tools that
+change state or send something out (`sensitive`) and those whose results only the user or
+their institution authored (`trusted`). Everything else, including any tool nobody
+listed, is `UNTRUSTED_EXTERNAL`, because unknown provenance must not read as trusted. It
+was written from tool names and docstrings, never from AgentDojo's injection vectors: a
+label chosen because an injection sits there would be the test-awareness `src/CLAUDE.md`
+forbids. **Do not tune it on AgentDojo results** -- that is what keeps AgentDojo held
+out, and a known 20-landing fix was rejected on exactly these grounds.
 
-`model` and `hf` drive a real model through AgentDojo's own pipeline, with
-`TekmorExecutor` in `ToolsExecutor`'s slot — the substitution this module always claimed
-a model-driven pipeline would make unchanged. Every caveat above is what it removes: the
-model may ignore an injection, may fail a benign task unaided (so the `allow-all` row is
-the ceiling that separates a defense's cost from the model's own), and may react to a
-verdict, because a refusal returns an error naming the public reason codes and the loop
-feeds it back. `model` expects an OpenAI-compatible endpoint; `hf` loads a local
-Transformers model into this process instead (`HFChatClient`), which is what a Colab GPU
-runtime can do without standing up a server. Both need a GPU, which is not in this
-repository.
-
-**What Tekmor is told about AgentDojo is deployment configuration, written per suite
-from what each tool returns** (`SUITES`). `trusted` lists the tools whose results only
-the user or their own institution authored (their balance, their scheduled transfers,
-their contacts, the channel list). Everything else is `UNTRUSTED_EXTERNAL`, including
-tools nobody listed, because unknown provenance must not read as trusted. `sensitive`
-lists the tools that change state or send something out. It was written from the tool
-names and docstrings, never from AgentDojo's injection vectors or injection tasks: a
-label chosen because an injection sits there would be the test-awareness the defense is
-forbidden (`src/CLAUDE.md`). Nothing is marked confidential and no suite has a
-capability lattice, so Permitted-Flow and REWRITE are unexercised here. Every
-Trusted-Action violation escalates to the simulated human, who denies.
+Nothing in these suites is labelled confidential and none has a capability lattice, so
+Permitted-Flow and REWRITE are unexercised here; every Trusted-Action violation escalates
+to a simulated human who denies.
 """
 
 from __future__ import annotations
