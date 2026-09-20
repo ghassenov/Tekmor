@@ -20,7 +20,8 @@ from tekmor.defense import (
     Verdict,
     mediate,
 )
-from tekmor.defense.auditor import gray
+from tekmor.defense.auditor import Judge, gray
+from tekmor.defense.baselines import RefuseAll
 from tekmor.policy.core import Policy
 from tekmor.provenance.taint import USER_REQUEST
 from tekmor.provenance.trust import Source, TrustLevel
@@ -170,3 +171,36 @@ def test_the_model_judge_is_a_deterministic_probability():
     assert 0.0 <= first <= 1.0
     judge._answers.clear()
     assert judge.aligned("Read invoice INV-91.", action) == first
+
+
+def test_deny_gray_refuses_every_gray_zone_allow_and_counts_it(matrix):
+    """`RefuseAll` is the control: same mechanism, no judgement, and `calls` is the zone."""
+    judge = RefuseAll()
+    assert isinstance(judge, Judge)
+    monitor = ReferenceMonitor()
+    auditor = AlignmentAuditor(monitor, judge)
+    asked = set()
+
+    class Both:
+        name = "both"
+
+        def decide(self, state, action, provenance, policy):
+            core = monitor.decide(state, action, provenance, policy)
+            audited = auditor.decide(state, action, provenance, policy)
+            if core.verdict is Verdict.ALLOW and gray(provenance, policy):
+                asked.add((state.task, str(action)))
+                # Refused, never blocked: a refusal to confirm defers, it does not prove.
+                assert audited.verdict in {Verdict.REWRITE, Verdict.ESCALATE}
+                assert "TASK_ALIGNMENT_UNCONFIRMED" in audited.reason_codes
+            else:
+                assert audited.verdict is core.verdict
+            return audited
+
+    for scenario in matrix:
+        run(scenario, Both())
+    assert asked
+    # Asked on the gray zone and nowhere else, and counted per distinct question exactly
+    # as `CausalJudge` counts its cache misses — which is what makes this arm's gray-zone
+    # size comparable with the model judges' recorded call counts.
+    assert judge.calls == len(judge._answers) == len(asked)
+    assert set(judge._answers.values()) == {0.0}
