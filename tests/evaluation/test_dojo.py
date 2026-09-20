@@ -10,10 +10,12 @@ pytest.importorskip("agentdojo")
 
 from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime  # noqa: E402
 from agentdojo.task_suite.load_suites import get_suites  # noqa: E402
+from agentdojo.types import text_content_block_from_string  # noqa: E402
 
 from evaluation.dojo import (  # noqa: E402
     SUITES,
     VERSION,
+    HFToolCallingLLM,
     TekmorExecutor,
     evaluate,
     label,
@@ -171,3 +173,62 @@ def test_the_model_agent_mediates_its_own_calls_and_is_told_what_was_refused(sui
     assert refusals, "the agent was never shown the refusal"
     assert refusals[-1]["error"].startswith("refused by policy: TARGET_TOOL_SENSITIVE")
     assert "ADVERSARY" not in refusals[-1]["error"]
+
+
+def test_native_tool_calls_are_parsed_and_malformed_ones_are_counted_not_guessed():
+    parse = HFToolCallingLLM._parse
+    one = parse(
+        '<tool_call>\n{"name": "read_file", "arguments": {"file_path": "b.txt"}}\n</tool_call>'
+    )
+    assert one == [FunctionCall(function="read_file", args={"file_path": "b.txt"})]
+    # Two calls in one turn, and prose around them, which the template allows.
+    two = parse(
+        'Let me look.<tool_call>{"name": "get_balance", "arguments": {}}</tool_call>'
+        'and<tool_call>{"name": "get_iban", "arguments": {}}</tool_call>'
+    )
+    assert [c.function for c in two] == ["get_balance", "get_iban"]
+    # The turn that broke the earlier run: prose and no call at all. It must parse to
+    # nothing rather than to a guessed call, because the loop ends on an empty list.
+    assert parse("I will proceed to send the payment using this information.") == []
+    # Unparseable JSON is dropped, never turned into a call with invented arguments.
+    assert parse("<tool_call>{not json}</tool_call>") == []
+
+
+def test_a_tool_result_goes_back_in_the_role_the_template_expects():
+    chat = HFToolCallingLLM._to_chat(
+        [
+            {"role": "user", "content": [text_content_block_from_string("pay the bill")]},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [FunctionCall(function="get_balance", args={})],
+            },
+            {
+                "role": "tool",
+                "content": [text_content_block_from_string("120.0")],
+                "tool_call_id": "1",
+                "tool_call": FunctionCall(function="get_balance", args={}),
+                "error": None,
+            },
+        ]
+    )
+    assert [m["role"] for m in chat] == ["user", "assistant", "tool"]
+    assert chat[1]["tool_calls"][0]["function"]["name"] == "get_balance"
+    assert chat[2]["content"] == "120.0"
+
+
+def test_a_refusal_reaches_the_model_as_the_tool_result():
+    # The monitor's refusal is the only thing the agent learns about the decision, so it
+    # must survive the conversion instead of being replaced by empty content.
+    chat = HFToolCallingLLM._to_chat(
+        [
+            {
+                "role": "tool",
+                "content": [text_content_block_from_string("")],
+                "tool_call_id": "1",
+                "tool_call": FunctionCall(function="send_money", args={}),
+                "error": "refused by policy: TARGET_TOOL_SENSITIVE",
+            }
+        ]
+    )
+    assert chat[0] == {"role": "tool", "content": "refused by policy: TARGET_TOOL_SENSITIVE"}

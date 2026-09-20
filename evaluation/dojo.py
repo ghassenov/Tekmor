@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -78,6 +79,7 @@ from agentdojo.types import (
     ChatAssistantMessage,
     ChatMessage,
     ChatToolResultMessage,
+    get_text_content_as_str,
     text_content_block_from_string,
 )
 from pydantic import BaseModel
@@ -475,18 +477,22 @@ class HFChatClient:
             raise ValueError(f"unknown quantization {self.quant!r}")
         self.model.eval()
 
-    def _create(self, *, model: str, messages: Sequence[Mapping[str, Any]], **_: Any) -> Any:
+    def generate(
+        self, messages: Sequence[Mapping[str, Any]], tools: list[dict] | None = None
+    ) -> str:
+        """Greedy continuation of `messages`. With `tools`, the template's own tool format."""
         import torch
 
         self.load()
+        kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
+        if tools:
+            kwargs["tools"] = tools
         try:
             prompt = self.tokenizer.apply_chat_template(
-                list(messages), tokenize=False, add_generation_prompt=True, enable_thinking=False
+                list(messages), enable_thinking=False, **kwargs
             )
         except TypeError:  # a template without Qwen3's thinking switch
-            prompt = self.tokenizer.apply_chat_template(
-                list(messages), tokenize=False, add_generation_prompt=True
-            )
+            prompt = self.tokenizer.apply_chat_template(list(messages), **kwargs)
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         with torch.no_grad():
             generated = self.model.generate(
@@ -498,8 +504,116 @@ class HFChatClient:
         self.calls += 1
         if not text.strip():
             self.empty += 1
-        message = SimpleNamespace(content=text)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+        return text
+
+    def _create(self, *, model: str, messages: Sequence[Mapping[str, Any]], **_: Any) -> Any:
+        text = self.generate(messages)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+
+
+class HFToolCallingLLM(BasePipelineElement):
+    """Drives a local model through the tool-calling format it was *trained* on.
+
+    `LocalLLM` teaches a bespoke `<function=name>{...}</function>` convention in the
+    system prompt. Measured on Qwen3-8B (`docs/decisions.md`), that model emits a
+    well-formed call on the first turn and then, once a tool result comes back, narrates
+    what it intends to do instead of calling anything — the loop sees no tool call and
+    ends, so no benign task ever completes.
+
+    This element instead hands the tools to the chat template (`tools=`) and parses the
+    model's own `<tool_call>` blocks, which is how AgentDojo drives its OpenAI and
+    Anthropic models too. `LocalLLM`'s text convention exists for servers with no tool
+    support, so using the native one is the closer analogue of AgentDojo's own setup,
+    not a prompt tuned to its tasks — the system message is still AgentDojo's, unedited.
+
+    Multi-turn is the point: the tool result goes back as a `tool` role the template
+    knows, rather than as prose inside a user turn.
+    """
+
+    name = "hf-native"
+
+    def __init__(self, client: HFChatClient) -> None:
+        self.client = client
+        #: Completions carrying no tool call. The loop ends on one, so a run that stops
+        #: early is either a finished task or this; the count separates them.
+        self.no_tool_call = 0
+
+    @staticmethod
+    def _schema(runtime: FunctionsRuntime) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters.model_json_schema(),
+                },
+            }
+            for tool in runtime.functions.values()
+        ]
+
+    @staticmethod
+    def _to_chat(messages: Sequence[ChatMessage]) -> list[dict]:
+        chat: list[dict] = []
+        for message in messages:
+            role = message["role"]
+            text = get_text_content_as_str(message["content"] or [])
+            if role == "tool":
+                # The template's own tool role, so the model sees a result where it was
+                # trained to see one. An error is the refusal text the monitor produced.
+                chat.append({"role": "tool", "content": message.get("error") or text})
+            elif role == "assistant":
+                calls = [
+                    {
+                        "type": "function",
+                        "function": {"name": c.function, "arguments": dict(c.args)},
+                    }
+                    for c in (message.get("tool_calls") or ())
+                ]
+                entry: dict = {"role": "assistant", "content": text}
+                if calls:
+                    entry["tool_calls"] = calls
+                chat.append(entry)
+            else:
+                chat.append({"role": role, "content": text})
+        return chat
+
+    @staticmethod
+    def _parse(completion: str) -> list[FunctionCall]:
+        calls = []
+        for block in re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", completion, re.DOTALL):
+            try:
+                data = json.loads(block)
+            except json.JSONDecodeError:
+                print(f"[debug] broken tool_call JSON: {block[:200]!r}")
+                continue
+            if isinstance(data, dict) and isinstance(data.get("name"), str):
+                args = data.get("arguments")
+                calls.append(
+                    FunctionCall(
+                        function=data["name"], args=dict(args) if isinstance(args, dict) else {}
+                    )
+                )
+        return calls
+
+    def query(
+        self,
+        query: str,
+        runtime: FunctionsRuntime,
+        env: Env = EmptyEnv(),  # noqa: B008 - AgentDojo's own signature
+        messages: Sequence[ChatMessage] = [],
+        extra_args: dict = {},  # noqa: B006 - AgentDojo's own signature
+    ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
+        completion = self.client.generate(self._to_chat(messages), tools=self._schema(runtime))
+        calls = self._parse(completion)
+        if not calls:
+            self.no_tool_call += 1
+        message = ChatAssistantMessage(
+            role="assistant",
+            content=[text_content_block_from_string(completion.strip())],
+            tool_calls=calls,
+        )
+        return query, runtime, env, [*messages, message], extra_args
 
 
 def ground_truth_agent(
@@ -733,9 +847,10 @@ def add_agent_args(parser: argparse.ArgumentParser) -> None:
     """The flags that choose what drives a run, shared by every driver that has one."""
     parser.add_argument(
         "--agent",
-        choices=["ground-truth", "model", "hf"],
+        choices=["ground-truth", "model", "hf", "hf-native"],
         default="ground-truth",
-        help="'model' drives an OpenAI-compatible endpoint, 'hf' a local Transformers model",
+        help="'model' an OpenAI-compatible endpoint; 'hf' a local model through AgentDojo's "
+        "text convention; 'hf-native' the same model through its own tool-call format",
     )
     # Explicitly `agent_`-named: a driver may also load a *judge* model, and two models
     # in one command line must not share a --model or a --dtype.
@@ -764,6 +879,11 @@ def agent_from_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -
         return ground_truth_agent, None
     if not args.agent_model:
         parser.error(f"--agent {args.agent} needs --agent-model")
+    if args.agent == "hf-native":
+        client = HFChatClient(
+            args.agent_model, args.agent_quant, args.agent_dtype, args.agent_max_new_tokens
+        )
+        return model_agent(HFToolCallingLLM(client), args.agent_max_iters), client
     if args.agent == "hf":
         client: Any = HFChatClient(
             args.agent_model, args.agent_quant, args.agent_dtype, args.agent_max_new_tokens
@@ -785,8 +905,13 @@ def _agent_description(args: argparse.Namespace) -> str:
     if args.agent == "ground-truth":
         return "scripted: user ground truth, then injection ground truth"
     where = (
-        f"local transformers, quant {args.agent_quant}, dtype {args.agent_dtype}"
-        if args.agent == "hf"
+        f"local transformers, quant {args.agent_quant}, dtype {args.agent_dtype}, "
+        + (
+            "its own tool-call format"
+            if args.agent == "hf-native"
+            else "AgentDojo's text convention"
+        )
+        if args.agent.startswith("hf")
         else f"served at {args.agent_base_url}"
     )
     return (
