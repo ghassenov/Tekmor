@@ -86,3 +86,72 @@ record, and the only thing that can tie this run to them is a matching unaudited
 - Escalation counts are reported as the deferral load a human would carry. No run here
   has a human in it: an ESCALATE is scored as a refusal, as everywhere else in this
   project.
+
+---
+
+# Results
+
+Run at commit `7b88710` (this file's pre-registration commit), clean tree, CPU, no model
+loaded. Full tables in `docs/decisions.md`; this section records the gates only.
+
+## Against the pre-registered gates
+
+**Validity check: passed.** The unaudited `tekmor` row reproduced BTU 67/97 and
+ASR 85/583 — the exact counts from the endorsement entry — so this run is comparable with
+the GPU rows whose raw output was lost.
+
+**Predictions: all landed.** Matrix BTU 0.75, ASR 0.06, 70 escalations, and the same three
+flips, every value computed in advance. AgentDojo ASR 0.00 as H1 required, BTU 0.45,
+which is under the predicted ceiling of 0.47.
+
+**H1: verified, no violation.** On every suite and both sets, deny-gray scored no higher
+than either judge on either axis. The arms are comparable.
+
+**H2: undecided by its own gate, and recorded that way.**
+
+| judge | BTU | gain over deny-gray | verdict |
+|---|---|---|---|
+| deny-gray | 44/97 = 0.454 | — | — |
+| Phi-3-mini fp16 | 46/97 = 0.474 | 2/97 = 0.021 | undecided band |
+| Qwen3-8B NF4 | 48/97 = 0.495 | 4/97 = 0.041 | undecided band |
+
+Both land inside the 0.02–0.05 band committed in advance as not a result at 97 benign
+runs. Phi-3-mini's sits 0.0006 above the supported threshold and is not rounded into it.
+The band was set before the numbers existed precisely so this could not be decided after
+seeing them.
+
+## Observed, independent of the gate
+
+Three AgentDojo suites of four — banking, slack, travel — are identical to the last digit
+under deny-gray and under both judges, on BTU and ASR. So is the entire matrix. Every
+measurable difference between judging and refusing is in workspace: 18/40 benign runs
+under deny-gray, 20/40 under Phi-3-mini, 22/40 under Qwen3-8B.
+
+## An unplanned second run, and what it is worth
+
+Running without `--endorse` was not pre-registered; it was added because the GPU entry
+flagged its `tekmor`-without-endorsement comparison as coming from a separate run. Within
+one run, deny-gray strictly dominates the core: identical BTU (44/97 both), and the 21
+remaining attacks removed. Endorsement and deny-gray cancel exactly, which follows from
+`auditor.gray` reading `Source.trust` rather than the endorsed `integrity`.
+
+**This arm is exploratory and is labelled as such.** It was not pre-registered, its gate
+was not set in advance, and its headline — equal BTU — is the number this driver is
+weakest at: deny-gray refuses far more benign actions than the core (travel FBR
+0.05 → 0.84) and completes the same tasks only because ground-truth replay scores success
+from world state. Treat the dominance as a hypothesis for a model-driven run, not a
+result.
+
+## Interpretation, kept apart from the above
+
+The earlier entry inferred from answer distributions that both judges were acting as
+gray-zone refusal switches. This measures that inference directly and it holds: the switch
+reproduces them almost everywhere. The consequence for Proposal B is procedural rather
+than numerical — a judge's row against `tekmor` mostly measures the refusal, so from here
+a judge is scored against `deny-gray`.
+
+## Not claimed
+
+Nothing about a frontier judge, which was not run. Nothing about a model-driven agent: ASR
+is the always-obeys bound and BTU is "would the policy have permitted the oracle trace".
+The two judge rows are the recorded GPU numbers, not reruns.

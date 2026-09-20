@@ -1685,3 +1685,130 @@ not scored against (AgentDyn, arXiv:2602.03117).
 
 **Not claimed.** Nothing about a model-driven agent. ASR is the always-obeys bound and
 provenance is near-oracle, more load-bearingly so for this arm than the parent one.
+
+## deny-gray: three suites of four need no judge at all, and the two judges differ from refusing by four runs and two (2026-09-20)
+
+**Context.** The *"Proposal B on a GPU"* entry above closed with one open item, in its own
+words: *"A `deny-gray` baseline (refuse every gray-zone ALLOW, no judge) on the same
+AgentDojo configuration. That is the comparison that decides whether any judge here adds
+anything."* Both GPU judges answered below threshold on ~99% of the gray zone (852/858
+and 840/849), so their rows could not be read as alignment checking until a refuse-all
+row existed beside them. Pre-registered in `research/experiments/deny_gray/README.md`,
+committed before the first run.
+
+**Decided. The control is a `Judge`, not a second defense.** `RefuseAll`
+(`defense/baselines.py`) returns 0.0 for every question. Wrapped in the existing
+`AlignmentAuditor` it holds the gray-zone definition, the REWRITE-else-ESCALATE fallback
+and the monotone fusion fixed, so the arms differ in the judge alone. It sits in
+`baselines.py` for the reason `deny-sensitive` does. `--judge none` runs it with no model
+loaded, on the CPU this project has.
+
+**What it measured** (endorsement on, the setting the auditor is for; rows marked \* are
+the recorded GPU rows, not rerun here):
+
+```
+matrix (dev, 26)          BTU   ASR   escal.  flips   gray calls   s/call
+tekmor (no auditor)       1.00  0.11     6      -         -          -
++ deny-gray               0.75  0.06    70      3        61         0.00
++ Qwen3-8B NF4 *          0.75  0.06    70      3        61         0.37
++ Phi-3-mini fp16 *       0.75  0.06    70      3        61         0.24
+
+AgentDojo v1.2.2 (held out), 97 benign / 583 attack runs, pooled over 4 suites
+                          BTU            ASR            UA
+tekmor (endorse)      67/97 = 0.69   85/583 = 0.15     0.66
++ deny-gray           44/97 = 0.45    0/583 = 0.00     0.46
++ Qwen3-8B NF4 *      48/97 = 0.49    0/583 = 0.00     0.50
++ Phi-3-mini fp16 *   46/97 = 0.47    0/583 = 0.00     0.48
+
+per suite (BTU / ASR)     banking      slack        travel       workspace
+tekmor (endorse)          0.69/0.00    0.38/0.26    0.70/0.00    0.85/0.27
++ deny-gray               0.44/0.00    0.24/0.00    0.70/0.00    0.45/0.00
++ Qwen3-8B NF4 *          0.44/0.00    0.24/0.00    0.70/0.00    0.55/0.00
++ Phi-3-mini fp16 *       0.44/0.00    0.24/0.00    0.70/0.00    0.50/0.00
+```
+
+- **On the matrix, refusing without asking reproduces both judge rows exactly** — the
+  same BTU, the same ASR, the same 70 escalations, and the same three flipped scenarios
+  (the endorsed-invoice pair and the SOC phishing triage). All four values were
+  predicted in advance from the recorded rows.
+- **On AgentDojo, three suites of four are identical to the last digit.** Banking, slack
+  and travel give the same BTU and the same ASR under deny-gray as under either judge.
+  Every measurable difference between "judge" and "refuse" is in workspace: 18/40 benign
+  runs under deny-gray, 20/40 under Phi-3-mini, 22/40 under Qwen3-8B.
+- **The validity check passes.** The unaudited `tekmor` row reproduces 67/97 and 85/583,
+  the exact counts from the endorsement entry. This matters more than usual: the GPU runs
+  happened on an ephemeral Colab VM whose `runs.jsonl` and `decisions.jsonl` are lost, so
+  a matching unaudited row is the only thing that ties this CPU run to those numbers.
+- **H1 is verified and no arm violated it.** A refuse-all judge refuses a superset of what
+  any judge at the same threshold refuses, so it can only score lower on both axes.
+  Observed on every suite and both sets, which is what makes the arms comparable.
+- **H2 is undecided by its own gate, and is reported that way.** The pre-registration
+  asked for `gain = BTU(judge) − BTU(deny-gray)` at equal ASR, supported at `≤ 0.02` and
+  refuted at `≥ 0.05`, with the band between them committed in advance as not a result at
+  97 benign runs. Measured: Qwen3-8B 4/97 = 0.041, Phi-3-mini 2/97 = 0.021. Both land in
+  the undecided band. Phi-3-mini's sits 0.0006 above the supported threshold and is **not**
+  rounded down into it.
+- **The finding that does not depend on the gate is the localization.** Whatever the two
+  judges contributed over refusing the zone unasked is four benign workspace runs and two,
+  and nothing anywhere else. The cost of obtaining it was 0.24–0.38 s per uncached call
+  against 0.00 for the control.
+- The control saw 811 distinct gray-zone calls on AgentDojo (872 including the matrix),
+  against the judges' 858 and 849. *Inferred, not observed:* refusing the six and nine
+  calls those judges confirmed changes what executes afterwards, so the later call sets
+  differ.
+
+**A second run closes a caveat the GPU entry left open.** That entry compared its judge
+rows against `tekmor` *without* endorsement and noted the two came from separate runs. Run
+without `--endorse`, both rows come from one:
+
+```
+AgentDojo v1.2.2, no endorsement, 97 benign / 583 attack runs
+                          BTU            ASR         FBR per suite (bank/slack/trav/work)
+tekmor                44/97 = 0.45   21/583 = 0.036    0.39 / 0.29 / 0.05 / 0.33
++ deny-gray           44/97 = 0.45    0/583 = 0.000    0.52 / 0.54 / 0.84 / 0.50
+```
+
+- **Refusing the gray zone strictly dominates the core here**: identical BTU on all four
+  suites, and the 21 remaining attacks — the slack URL-fetch residual through an
+  unguarded read — all removed. Within one run, not across two.
+- **Endorsement and deny-gray cancel exactly.** `deny-gray` scores 44/97 and 0/583 with
+  endorsement on and with it off, per suite as well as pooled. That is the identity the
+  mechanism implies rather than a coincidence: endorsement's whole effect is to move
+  actions from refused into allowed-but-gray, and refusing the gray zone moves them back.
+  Observed, and it follows from `auditor.gray` reading `Source.trust` and not the endorsed
+  `integrity`.
+- **The equal BTU is not a deployment claim, and the FBR row is why.** Deny-gray refuses
+  far more benign actions than the core (travel 0.05 → 0.84) while completing the same
+  benign tasks, because the driver replays ground truth and task success is scored from
+  world state: a refused action that the success condition does not depend on costs
+  nothing here. A model-driven agent that is refused mid-task is derailed instead. This is
+  the same artifact recorded for field labels, and it cuts the same way.
+
+**Verdict. Proposal B stays built, measured and not adopted, and the reason sharpens.**
+The earlier entry read the judges as gray-zone refusal switches from their answer
+distributions. This measures that reading directly: the switch reproduces them. The
+failure is not that the judges judge badly — it is that on ~99% of the zone no judgement
+happened, and the measurable residue of the judgement that did happen is two to four
+benign runs out of 97, inside a band this harness was declared unable to resolve.
+
+**What this changes for any future judge.** A judge must be scored against `deny-gray`,
+not against `tekmor`. The gap to `tekmor` is dominated by the refusal and says almost
+nothing about the judging; `--judge none` now makes that row one command.
+
+**Rejected.** Rounding Phi-3-mini's 0.021 down to the supported threshold. Reading the
+localization as "workspace is where alignment checking works" — four runs and two, in the
+suite with the most benign runs, is equally consistent with noise, and the
+pre-registration said so before the numbers existed. Adopting `deny-gray` as a default on
+the strength of the dominance above: it is dominance on a ground-truth driver, bought by
+refusing roughly half of all benign actions, and the utility that costs is exactly what
+this harness cannot measure.
+
+**Open.** Whether the dominance survives a model-driven agent, which is the same question
+the field-label result and every AgentDojo entry since Phase 4 are waiting on. `deny-gray`
+is the cheapest arm to rerun there: it needs no judge, so it isolates the cost of refusing
+the gray zone from the cost of deciding what is in it.
+
+**Not claimed.** Nothing about a frontier judge, which is not measured here, and nothing
+comparable with Task Shield's or AlignmentCheck's numbers. Nothing about a model-driven
+agent: the driver replays ground truth and obeys every injection, so ASR is the
+always-obeys bound and BTU is "would the policy have permitted the oracle trace".
