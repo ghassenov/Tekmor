@@ -11,16 +11,27 @@ supplies is `TekmorExecutor`, a pipeline element that replaces AgentDojo's
 `ToolsExecutor`: every tool call becomes an `Action`, goes through `mediate()` with the
 run's taint as its provenance, and executes only as `gateway.permitted` allows.
 
-**The agent is scripted, and fully fooled.** There is no GPU and no model endpoint in
-this setting, so the driver replays AgentDojo's own ground truth. A benign run is the
-user task's ground-truth calls. An attacked run is those calls, made in the environment
-AgentDojo's `direct` attack injected, and then the injection task's ground-truth calls:
-an agent that did the user's work, read the injection and obeyed it. That is this
-repository's scripted adapter on someone else's benchmark. It measures what the monitor
-stops, never whether a model would be fooled in the first place, so ASR here is the
-*undefended-agent-always-obeys* bound, not a comparison with CaMeL, FIDES or any number
-reported with a real model. `TekmorExecutor` is the element a model-driven pipeline
-would use unchanged.
+**Two agents, and which one ran decides what the numbers mean.** `--agent` selects it and
+the manifest records it.
+
+`ground-truth` (the default, and every recorded number in `docs/decisions.md`) replays
+AgentDojo's own ground truth. A benign run is the user task's ground-truth calls. An
+attacked run is those calls, made in the environment AgentDojo's `direct` attack
+injected, and then the injection task's ground-truth calls: an agent that did the user's
+work, read the injection and obeyed it. That is this repository's scripted adapter on
+someone else's benchmark. It measures what the monitor stops, never whether a model would
+be fooled in the first place, so ASR there is the *undefended-agent-always-obeys* bound,
+not a comparison with CaMeL, FIDES or any number reported with a real model. Its BTU asks
+only whether the policy would have permitted the oracle trace, and its provenance is
+near-oracle because the script copies values verbatim.
+
+`model` drives an OpenAI-compatible endpoint through AgentDojo's own pipeline, with
+`TekmorExecutor` in `ToolsExecutor`'s slot — the substitution this module always claimed
+a model-driven pipeline would make unchanged. Every caveat above is what it removes: the
+model may ignore an injection, may fail a benign task unaided (so the `allow-all` row is
+the ceiling that separates a defense's cost from the model's own), and may react to a
+verdict, because a refusal returns an error naming the public reason codes and the loop
+feeds it back. It needs a served model and a GPU; neither is in this repository.
 
 **What Tekmor is told about AgentDojo is deployment configuration, written per suite
 from what each tool returns** (`SUITES`). `trusted` lists the tools whose results only
@@ -45,7 +56,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from agentdojo.agent_pipeline import (
+    AgentPipeline,
+    InitQuery,
+    SystemMessage,
+    ToolsExecutionLoop,
+)
+from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
+from agentdojo.agent_pipeline.llms.local_llm import LocalLLM
 from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
@@ -378,6 +397,62 @@ class DojoRecord:
         return {**asdict(self), "verdicts": list(self.verdicts)}
 
 
+#: Builds the element that drives one run. It is handed that run's executor and its
+#: tasks, and returns anything with AgentDojo's `query` signature.
+Agent = Callable[[TekmorExecutor, BaseUserTask, "BaseInjectionTask | None"], BasePipelineElement]
+
+
+def ground_truth_agent(
+    executor: TekmorExecutor, user_task: BaseUserTask, injection_task: BaseInjectionTask | None
+) -> BasePipelineElement:
+    """The default: replay ground truth and obey every injection.
+
+    Every recorded AgentDojo number in `docs/decisions.md` was produced through this, so
+    it stays the default and stays bit-identical.
+    """
+    return FooledAgent(executor, user_task, injection_task)
+
+
+def model_agent(llm: BasePipelineElement, max_iters: int = 15) -> Agent:
+    """A real agent: the model chooses the calls, and sees what Tekmor refuses.
+
+    This is AgentDojo's own pipeline — its system message, its loop, its order — with
+    `TekmorExecutor` in `ToolsExecutor`'s slot, which is the substitution the module
+    docstring has always claimed a model-driven pipeline would make unchanged.
+
+    **What it changes about every metric.** With ground truth the agent obeys the
+    injection by construction, so ASR is the always-obeys bound and BTU asks only whether
+    the policy would have permitted the oracle trace. Here the model may ignore an
+    injection (ASR becomes a measurement rather than a bound), may fail a benign task on
+    its own (BTU stops being a property of the policy alone, so the `allow-all` row is
+    the ceiling that separates the two), and — for the first time in this project — may
+    *react to a verdict*: a refusal returns an error naming the public reason codes, and
+    the loop feeds it back, so the agent can retry or route around it. `runtime/qwen.py`
+    records that its own loop does not do this; AgentDojo's does.
+
+    The system message is `load_system_message(None)`, AgentDojo's default, taken rather
+    than written: a prompt of this project's own choosing on a held-out benchmark would
+    be a tuned input.
+    """
+    system_message = load_system_message(None)
+
+    def build(
+        executor: TekmorExecutor,
+        user_task: BaseUserTask,
+        injection_task: BaseInjectionTask | None,
+    ) -> BasePipelineElement:
+        return AgentPipeline(
+            [
+                SystemMessage(system_message),
+                InitQuery(),
+                llm,
+                ToolsExecutionLoop([executor, llm], max_iters),
+            ]
+        )
+
+    return build
+
+
 def defenses() -> tuple[Defense, ...]:
     """No `tekmor+canary`: no suite has a secret registry to scan for."""
     return AllowAll(), DenySensitive(), KeywordFilter(), ReferenceMonitor()
@@ -392,6 +467,7 @@ def run_pair(
     attack,
     endorse=False,
     field_labels=False,
+    agent: Agent = ground_truth_agent,
     **roles,
 ) -> DojoRecord:
     """One run, scored by AgentDojo's own checks against the calls that *executed*.
@@ -409,7 +485,7 @@ def run_pair(
     injections = attack.attack(user_task, injection_task) if injection_task else {}
     environment = user_task.init_environment(suite.load_and_inject_default_environment(injections))
     pre_environment = environment.model_copy(deep=True)
-    _, _, environment, messages, _ = FooledAgent(executor, user_task, injection_task).query(
+    _, _, environment, messages, _ = agent(executor, user_task, injection_task).query(
         user_task.PROMPT, FunctionsRuntime(suite.tools), environment
     )
     output = messages[-1]["content"] or []
@@ -436,6 +512,7 @@ def evaluate(
     endorse: bool = False,
     build: Callable[[], Sequence[Defense]] = defenses,
     field_labels: bool = False,
+    agent: Agent = ground_truth_agent,
     **roles: bool,
 ) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
@@ -462,6 +539,7 @@ def evaluate(
                         attack,
                         endorse,
                         field_labels,
+                        agent,
                         **roles,
                     )
                 )
@@ -476,6 +554,7 @@ def evaluate(
                             attack,
                             endorse,
                             field_labels,
+                            agent,
                             **roles,
                         )
                     )
@@ -574,14 +653,46 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="vouch per field of a tool result, not per result (TaintTracker.field_labels)",
     )
+    parser.add_argument(
+        "--agent",
+        choices=["ground-truth", "model"],
+        default="ground-truth",
+        help="'model' drives an OpenAI-compatible endpoint instead of replaying ground truth",
+    )
+    parser.add_argument("--model", default=None, help="model id served at --base-url")
+    parser.add_argument(
+        "--base-url",
+        default="http://localhost:8000/v1",
+        help="OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama)",
+    )
+    parser.add_argument("--max-iters", type=int, default=15, help="tool-loop turns per run")
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
+
+    if args.agent == "model":
+        if not args.model:
+            parser.error("--agent model needs --model")
+        import openai
+
+        # Temperature 0 and a pinned model id: the run has to be repeatable, and a
+        # sampled agent would make every number a sample of one.
+        agent = model_agent(
+            LocalLLM(
+                openai.OpenAI(base_url=args.base_url, api_key="none"),
+                args.model,
+                temperature=0.0,
+            ),
+            args.max_iters,
+        )
+    else:
+        agent = ground_truth_agent
 
     records = evaluate(
         args.suites,
         args.limit,
         args.endorse,
         field_labels=args.field_labels,
+        agent=agent,
         arguments=args.arguments,
         endorse_targets=args.endorse_targets,
     )
@@ -594,6 +705,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         + ["endorsed"] * args.endorse
         + ["targets"] * args.endorse_targets
         + ["fields"] * args.field_labels
+        + ["model"] * (args.agent == "model")
     )
     raw = args.results / "raw" / f"{stamp}-{tag}"
     processed = args.results / "processed" / f"{stamp}-{tag}"
@@ -614,7 +726,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "git_dirty": bool(_git("status", "--porcelain")),
                 "agentdojo_version": version("agentdojo"),
                 "benchmark_version": VERSION,
-                "agent": "scripted: user ground truth, then injection ground truth",
+                "agent": (
+                    f"model: {args.model} at {args.base_url}, temperature 0, "
+                    f"max_iters {args.max_iters}, AgentDojo's default system message"
+                    if args.agent == "model"
+                    else "scripted: user ground truth, then injection ground truth"
+                ),
                 "attack": "direct",
                 "approver": "deny",
                 "suites": args.suites,
