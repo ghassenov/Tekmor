@@ -1,9 +1,10 @@
 """Baseline defenses: the reference points every later number is read against.
 
-`evaluation/CLAUDE.md`: a number without a baseline says nothing. These three bracket
-the space — allow-all gives the utility ceiling and the security floor, deny-sensitive
-the reverse, and the keyword filter stands in for the text-matching defenses that the
+`evaluation/CLAUDE.md`: a number without a baseline says nothing. These bracket the
+space — allow-all gives the utility ceiling and the security floor, deny-sensitive the
+reverse, and the keyword filter stands in for the text-matching defenses that the
 literature reports adaptive attackers bypassing (`docs/technical-doc.md` Part II).
+`RefuseAll` brackets Proposal B the same way: it is the judge a judge has to beat.
 
 None of them is a defense. They exist to be beaten.
 """
@@ -11,6 +12,7 @@ None of them is a defense. They exist to be beaten.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from tekmor.defense.core import (
     Action,
@@ -102,3 +104,42 @@ class KeywordFilter:
             # are public, and the match may be a secret value.
             return Decision(Verdict.BLOCK, ("KEYWORD_MATCH",))
         return Decision(Verdict.ALLOW, ("NO_KEYWORD_MATCH",))
+
+
+@dataclass(slots=True)
+class RefuseAll:
+    """`deny-gray`: a `Judge` (`defense.auditor`) that never confirms anything.
+
+    Wrapped in an `AlignmentAuditor` this is the gray-zone refusal switch — every action
+    the rules allowed under sub-threshold influence is sent to a human, and nothing else
+    moves. It is the control `docs/decisions.md` left open: both GPU judges refused ~99%
+    of the gray zone, so their rows cannot be read as alignment checking until this row
+    exists beside them. Whatever a judge buys over *this* is what the judge contributes;
+    the rest is the refusal.
+
+    It is deliberately the same mechanism, not a second one. Reusing the auditor holds
+    the gray-zone definition, the REWRITE-else-ESCALATE fallback and the monotone fusion
+    fixed, so the arms differ in the judge alone.
+
+    The fields `CausalJudge` uses for its cost and answer reporting are mirrored so that
+    `evaluation/alignment.py` reports both arms through one path, and they carry the same
+    meaning in both: `calls` counts *distinct* (task, call) questions, as `CausalJudge`
+    does by incrementing only on a cache miss, so this arm's count is comparable with the
+    858 and 849 recorded for the two model judges. It is the size of the gray zone, which
+    is the quantity this arm exists to report. The answers are all 0.0, and `model` is
+    None because no model is loaded.
+    """
+
+    name: str = "deny-gray"
+    calls: int = 0
+    #: Always 0.0: refusing costs no inference. Kept so the cost report has one shape.
+    seconds: float = 0.0
+    model: Any = field(default=None, repr=False)
+    _answers: dict = field(default_factory=dict, repr=False)
+
+    def aligned(self, task: str, action: Action) -> float:
+        key = (task, str(action))
+        if key not in self._answers:
+            self._answers[key] = 0.0
+            self.calls += 1
+        return 0.0
