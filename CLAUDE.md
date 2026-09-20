@@ -23,20 +23,43 @@ architecture, trust lattice, metric definitions, literature review, and roadmap.
 before making architectural decisions. If an implementation deviates from it, document
 the deviation and why.
 
-**Current phase: foundation.** The repository is scaffolding plus documentation. The
-defense, policy engine, provenance system, simulator, and evaluation harness are
-**planned, not implemented**. Do not describe them as working.
+**Current phase: the five roadmap phases are complete; the work now is measurement.**
+The decision core, policy engine, provenance and taint propagation, canary scanner,
+simulator, observability and the evaluation harness are **implemented and tested**. The
+scenario matrix, robustness variants, ablations, the adaptive attacker and AgentDojo all
+run. Do not describe any of them as planned. For what each one measures and what it does
+not, read the nested `CLAUDE.md` and then `docs/decisions.md`, which is the running
+record of every result and its limits.
 
-**Chosen direction: Proposal A** (deterministic information-flow reference monitor) as
-the stable core. Proposal B (task-alignment auditor) and Proposal C (activation-delta
-drift probe) are research extensions gated on the core being stable and on the evidence
-thresholds in `docs/technical-doc.md` § Recommendations.
+**Chosen direction: Proposal A** (deterministic information-flow reference monitor) is
+the core, and it is built. The research extensions were gated on the evidence thresholds
+in `docs/technical-doc.md` § Recommendations, and the gates were applied:
+
+- **Endorsement** (FIDES-style, `provenance/taint.py`) is kept, **opt-in per policy**.
+- **Proposal B** (task-alignment auditor, `defense/auditor.py`) is **built, measured and
+  not adopted**. Its `deny-gray` control reproduces both measured judges almost
+  everywhere, so a judge is scored against that control, never against `tekmor`.
+- **Proposal C** (activation-delta drift probe) is **demoted to future work**; it failed
+  its gate on a 0.6B proxy and again on the reference model.
+- **Argument-level provenance** and **field-level labels** are built, measured and
+  **off**, with the reason recorded.
+
+A mechanism being built is not a mechanism being on. Before changing a default, read the
+entry in `docs/decisions.md` that turned it off — several were left off for reasons that
+are not about their numbers.
+
+**The standing confound.** Every AgentDojo number in this repository was produced by a
+driver that replays ground truth and obeys every injection, so ASR is an
+*always-obeys bound*, BTU asks only whether the policy would have permitted the oracle
+trace, and provenance is near-oracle. A model-driven driver exists (`--agent`), and
+results from the two are not comparable. Never put them in one table, and never quote a
+number from here without the driver that produced it.
 
 ### Research code vs production-oriented code
 
 | | Production-oriented | Research |
 |---|---|---|
-| Where | `src/`, `tests/` | `research/`, `evaluation/experiments/`, `notebooks/` if added |
+| Where | `src/`, `tests/` | `research/experiments/`, `notebooks/` |
 | Bar | Tested, typed, stable interfaces, reviewed | Reproducible and understandable; may be exploratory |
 | Rule | Security-critical paths need tests | Record hypothesis, method, and negative results |
 
@@ -57,6 +80,7 @@ src/tekmor/       implementation (see src/CLAUDE.md)
 tests/            unit / integration / security / evaluation
 evaluation/       scenarios (the matrix), harness, metrics, results
 research/         literature, hypotheses, research experiments, notes
+notebooks/        Colab notebooks for the runs that need a GPU
 docs/             project documentation; technical-doc.md is authoritative
 .github/          PR template, issue templates, CI
 ```
