@@ -22,6 +22,10 @@ qwen = ["transformers>=4.51", "torch>=2.4", "accelerate>=1.0"]
 # External validation on AgentDojo (evaluation/dojo.py). Evaluation-only: nothing under
 # src/ imports it.
 agentdojo = ["agentdojo>=0.1.35"]
+# Regenerating the documentation figures from recorded results (assets/figures.py).
+# Documentation-only: nothing under src/ or evaluation/ imports it, and the committed
+# PNGs mean a reader never needs it installed.
+docs = ["matplotlib>=3.8"]
 
 [dependency-groups]
 # pyyaml is here as well as in the extras so CI exercises the YAML front end; the qwen
