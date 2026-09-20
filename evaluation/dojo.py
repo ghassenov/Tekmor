@@ -11,16 +11,30 @@ supplies is `TekmorExecutor`, a pipeline element that replaces AgentDojo's
 `ToolsExecutor`: every tool call becomes an `Action`, goes through `mediate()` with the
 run's taint as its provenance, and executes only as `gateway.permitted` allows.
 
-**The agent is scripted, and fully fooled.** There is no GPU and no model endpoint in
-this setting, so the driver replays AgentDojo's own ground truth. A benign run is the
-user task's ground-truth calls. An attacked run is those calls, made in the environment
-AgentDojo's `direct` attack injected, and then the injection task's ground-truth calls:
-an agent that did the user's work, read the injection and obeyed it. That is this
-repository's scripted adapter on someone else's benchmark. It measures what the monitor
-stops, never whether a model would be fooled in the first place, so ASR here is the
-*undefended-agent-always-obeys* bound, not a comparison with CaMeL, FIDES or any number
-reported with a real model. `TekmorExecutor` is the element a model-driven pipeline
-would use unchanged.
+**Two agents, and which one ran decides what the numbers mean.** `--agent` selects it and
+the manifest records it.
+
+`ground-truth` (the default, and every recorded number in `docs/decisions.md`) replays
+AgentDojo's own ground truth. A benign run is the user task's ground-truth calls. An
+attacked run is those calls, made in the environment AgentDojo's `direct` attack
+injected, and then the injection task's ground-truth calls: an agent that did the user's
+work, read the injection and obeyed it. That is this repository's scripted adapter on
+someone else's benchmark. It measures what the monitor stops, never whether a model would
+be fooled in the first place, so ASR there is the *undefended-agent-always-obeys* bound,
+not a comparison with CaMeL, FIDES or any number reported with a real model. Its BTU asks
+only whether the policy would have permitted the oracle trace, and its provenance is
+near-oracle because the script copies values verbatim.
+
+`model` and `hf` drive a real model through AgentDojo's own pipeline, with
+`TekmorExecutor` in `ToolsExecutor`'s slot — the substitution this module always claimed
+a model-driven pipeline would make unchanged. Every caveat above is what it removes: the
+model may ignore an injection, may fail a benign task unaided (so the `allow-all` row is
+the ceiling that separates a defense's cost from the model's own), and may react to a
+verdict, because a refusal returns an error naming the public reason codes and the loop
+feeds it back. `model` expects an OpenAI-compatible endpoint; `hf` loads a local
+Transformers model into this process instead (`HFChatClient`), which is what a Colab GPU
+runtime can do without standing up a server. Both need a GPU, which is not in this
+repository.
 
 **What Tekmor is told about AgentDojo is deployment configuration, written per suite
 from what each tool returns** (`SUITES`). `trusted` lists the tools whose results only
@@ -39,13 +53,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+from agentdojo.agent_pipeline import (
+    AgentPipeline,
+    InitQuery,
+    SystemMessage,
+    ToolsExecutionLoop,
+)
+from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
+from agentdojo.agent_pipeline.llms.local_llm import LocalLLM
 from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
@@ -55,6 +79,7 @@ from agentdojo.types import (
     ChatAssistantMessage,
     ChatMessage,
     ChatToolResultMessage,
+    get_text_content_as_str,
     text_content_block_from_string,
 )
 from pydantic import BaseModel
@@ -378,6 +403,270 @@ class DojoRecord:
         return {**asdict(self), "verdicts": list(self.verdicts)}
 
 
+#: Builds the element that drives one run. It is handed that run's executor and its
+#: tasks, and returns anything with AgentDojo's `query` signature.
+Agent = Callable[[TekmorExecutor, BaseUserTask, "BaseInjectionTask | None"], BasePipelineElement]
+
+
+class HFChatClient:
+    """An OpenAI-shaped client backed by a local Transformers model, for `LocalLLM`.
+
+    `LocalLLM` wants `client.chat.completions.create(...)` and reads
+    `.choices[0].message.content`. Serving that from a model already in this process is
+    the smallest way to run a model-driven agent where there is a GPU but no server:
+    AgentDojo's own tool-calling prompt and its own output parser are used unchanged,
+    because `LocalLLM` itself is unchanged. The alternative — standing up vLLM — buys
+    throughput this project does not need and a Turing-era compatibility problem it does
+    not want.
+
+    Decoding is greedy and the `seed` `LocalLLM` sends is ignored, so a rerun with the
+    same model, dtype and device gives the same tokens. `temperature` and `top_p` are
+    accepted and ignored for the same reason; the manifest records greedy decoding
+    rather than the values.
+
+    Transformers and torch are the `qwen` extra, imported in `load()`.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        quant: str | None = None,
+        dtype: str = "float16",
+        max_new_tokens: int = 512,
+    ) -> None:
+        self.model_id = model_id
+        self.quant = quant
+        self.dtype = dtype
+        self.max_new_tokens = max_new_tokens
+        self.model: Any = None
+        self.tokenizer: Any = None
+        #: Completions that came back empty. An empty string parses as "no tool calls",
+        #: which ends a run and is indistinguishable from an agent that gave up, so it
+        #: is counted and reported rather than left to look like a result.
+        self.empty = 0
+        self.calls = 0
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def load(self) -> None:
+        if self.model is not None:
+            return
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ModuleNotFoundError:
+            raise RuntimeError(
+                "the model agent needs transformers and torch: --extra qwen"
+            ) from None
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        if self.quant == "nf4":
+            from transformers import BitsAndBytesConfig
+
+            config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=getattr(torch, self.dtype),
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, quantization_config=config, device_map="auto"
+            )
+        elif self.quant is None:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id, dtype=getattr(torch, self.dtype), device_map="auto"
+            )
+        else:
+            raise ValueError(f"unknown quantization {self.quant!r}")
+        self.model.eval()
+
+    def generate(
+        self, messages: Sequence[Mapping[str, Any]], tools: list[dict] | None = None
+    ) -> str:
+        """Greedy continuation of `messages`. With `tools`, the template's own tool format."""
+        import torch
+
+        self.load()
+        kwargs: dict[str, Any] = {"tokenize": False, "add_generation_prompt": True}
+        if tools:
+            kwargs["tools"] = tools
+        try:
+            prompt = self.tokenizer.apply_chat_template(
+                list(messages), enable_thinking=False, **kwargs
+            )
+        except TypeError:  # a template without Qwen3's thinking switch
+            prompt = self.tokenizer.apply_chat_template(list(messages), **kwargs)
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        with torch.no_grad():
+            generated = self.model.generate(
+                **inputs, max_new_tokens=self.max_new_tokens, do_sample=False
+            )
+        text = self.tokenizer.decode(
+            generated[0][inputs["input_ids"].shape[-1] :], skip_special_tokens=True
+        )
+        self.calls += 1
+        if not text.strip():
+            self.empty += 1
+        return text
+
+    def _create(self, *, model: str, messages: Sequence[Mapping[str, Any]], **_: Any) -> Any:
+        text = self.generate(messages)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=text))])
+
+
+class HFToolCallingLLM(BasePipelineElement):
+    """Drives a local model through the tool-calling format it was *trained* on.
+
+    `LocalLLM` teaches a bespoke `<function=name>{...}</function>` convention in the
+    system prompt. Measured on Qwen3-8B (`docs/decisions.md`), that model emits a
+    well-formed call on the first turn and then, once a tool result comes back, narrates
+    what it intends to do instead of calling anything — the loop sees no tool call and
+    ends, so no benign task ever completes.
+
+    This element instead hands the tools to the chat template (`tools=`) and parses the
+    model's own `<tool_call>` blocks, which is how AgentDojo drives its OpenAI and
+    Anthropic models too. `LocalLLM`'s text convention exists for servers with no tool
+    support, so using the native one is the closer analogue of AgentDojo's own setup,
+    not a prompt tuned to its tasks — the system message is still AgentDojo's, unedited.
+
+    Multi-turn is the point: the tool result goes back as a `tool` role the template
+    knows, rather than as prose inside a user turn.
+    """
+
+    name = "hf-native"
+
+    def __init__(self, client: HFChatClient) -> None:
+        self.client = client
+        #: Completions carrying no tool call. The loop ends on one, so a run that stops
+        #: early is either a finished task or this; the count separates them.
+        self.no_tool_call = 0
+
+    @staticmethod
+    def _schema(runtime: FunctionsRuntime) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters.model_json_schema(),
+                },
+            }
+            for tool in runtime.functions.values()
+        ]
+
+    @staticmethod
+    def _to_chat(messages: Sequence[ChatMessage]) -> list[dict]:
+        chat: list[dict] = []
+        for message in messages:
+            role = message["role"]
+            text = get_text_content_as_str(message["content"] or [])
+            if role == "tool":
+                # The template's own tool role, so the model sees a result where it was
+                # trained to see one. An error is the refusal text the monitor produced.
+                chat.append({"role": "tool", "content": message.get("error") or text})
+            elif role == "assistant":
+                calls = [
+                    {
+                        "type": "function",
+                        "function": {"name": c.function, "arguments": dict(c.args)},
+                    }
+                    for c in (message.get("tool_calls") or ())
+                ]
+                entry: dict = {"role": "assistant", "content": text}
+                if calls:
+                    entry["tool_calls"] = calls
+                chat.append(entry)
+            else:
+                chat.append({"role": role, "content": text})
+        return chat
+
+    @staticmethod
+    def _parse(completion: str) -> list[FunctionCall]:
+        calls = []
+        for block in re.findall(r"<tool_call>\s*(.*?)\s*</tool_call>", completion, re.DOTALL):
+            try:
+                data = json.loads(block)
+            except json.JSONDecodeError:
+                print(f"[debug] broken tool_call JSON: {block[:200]!r}")
+                continue
+            if isinstance(data, dict) and isinstance(data.get("name"), str):
+                args = data.get("arguments")
+                calls.append(
+                    FunctionCall(
+                        function=data["name"], args=dict(args) if isinstance(args, dict) else {}
+                    )
+                )
+        return calls
+
+    def query(
+        self,
+        query: str,
+        runtime: FunctionsRuntime,
+        env: Env = EmptyEnv(),  # noqa: B008 - AgentDojo's own signature
+        messages: Sequence[ChatMessage] = [],
+        extra_args: dict = {},  # noqa: B006 - AgentDojo's own signature
+    ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
+        completion = self.client.generate(self._to_chat(messages), tools=self._schema(runtime))
+        calls = self._parse(completion)
+        if not calls:
+            self.no_tool_call += 1
+        message = ChatAssistantMessage(
+            role="assistant",
+            content=[text_content_block_from_string(completion.strip())],
+            tool_calls=calls,
+        )
+        return query, runtime, env, [*messages, message], extra_args
+
+
+def ground_truth_agent(
+    executor: TekmorExecutor, user_task: BaseUserTask, injection_task: BaseInjectionTask | None
+) -> BasePipelineElement:
+    """The default: replay ground truth and obey every injection.
+
+    Every recorded AgentDojo number in `docs/decisions.md` was produced through this, so
+    it stays the default and stays bit-identical.
+    """
+    return FooledAgent(executor, user_task, injection_task)
+
+
+def model_agent(llm: BasePipelineElement, max_iters: int = 15) -> Agent:
+    """A real agent: the model chooses the calls, and sees what Tekmor refuses.
+
+    This is AgentDojo's own pipeline — its system message, its loop, its order — with
+    `TekmorExecutor` in `ToolsExecutor`'s slot, which is the substitution the module
+    docstring has always claimed a model-driven pipeline would make unchanged.
+
+    **What it changes about every metric.** With ground truth the agent obeys the
+    injection by construction, so ASR is the always-obeys bound and BTU asks only whether
+    the policy would have permitted the oracle trace. Here the model may ignore an
+    injection (ASR becomes a measurement rather than a bound), may fail a benign task on
+    its own (BTU stops being a property of the policy alone, so the `allow-all` row is
+    the ceiling that separates the two), and — for the first time in this project — may
+    *react to a verdict*: a refusal returns an error naming the public reason codes, and
+    the loop feeds it back, so the agent can retry or route around it. `runtime/qwen.py`
+    records that its own loop does not do this; AgentDojo's does.
+
+    The system message is `load_system_message(None)`, AgentDojo's default, taken rather
+    than written: a prompt of this project's own choosing on a held-out benchmark would
+    be a tuned input.
+    """
+    system_message = load_system_message(None)
+
+    def build(
+        executor: TekmorExecutor,
+        user_task: BaseUserTask,
+        injection_task: BaseInjectionTask | None,
+    ) -> BasePipelineElement:
+        return AgentPipeline(
+            [
+                SystemMessage(system_message),
+                InitQuery(),
+                llm,
+                ToolsExecutionLoop([executor, llm], max_iters),
+            ]
+        )
+
+    return build
+
+
 def defenses() -> tuple[Defense, ...]:
     """No `tekmor+canary`: no suite has a secret registry to scan for."""
     return AllowAll(), DenySensitive(), KeywordFilter(), ReferenceMonitor()
@@ -392,6 +681,7 @@ def run_pair(
     attack,
     endorse=False,
     field_labels=False,
+    agent: Agent = ground_truth_agent,
     **roles,
 ) -> DojoRecord:
     """One run, scored by AgentDojo's own checks against the calls that *executed*.
@@ -409,7 +699,7 @@ def run_pair(
     injections = attack.attack(user_task, injection_task) if injection_task else {}
     environment = user_task.init_environment(suite.load_and_inject_default_environment(injections))
     pre_environment = environment.model_copy(deep=True)
-    _, _, environment, messages, _ = FooledAgent(executor, user_task, injection_task).query(
+    _, _, environment, messages, _ = agent(executor, user_task, injection_task).query(
         user_task.PROMPT, FunctionsRuntime(suite.tools), environment
     )
     output = messages[-1]["content"] or []
@@ -436,6 +726,7 @@ def evaluate(
     endorse: bool = False,
     build: Callable[[], Sequence[Defense]] = defenses,
     field_labels: bool = False,
+    agent: Agent = ground_truth_agent,
     **roles: bool,
 ) -> list[DojoRecord]:
     """Every user task alone and every (user task, injection task) pair, per defense.
@@ -462,6 +753,7 @@ def evaluate(
                         attack,
                         endorse,
                         field_labels,
+                        agent,
                         **roles,
                     )
                 )
@@ -476,6 +768,7 @@ def evaluate(
                             attack,
                             endorse,
                             field_labels,
+                            agent,
                             **roles,
                         )
                     )
@@ -550,6 +843,83 @@ def table(rows: Sequence[DojoMetrics]) -> str:
     return "\n".join(lines)
 
 
+def add_agent_args(parser: argparse.ArgumentParser) -> None:
+    """The flags that choose what drives a run, shared by every driver that has one."""
+    parser.add_argument(
+        "--agent",
+        choices=["ground-truth", "model", "hf", "hf-native"],
+        default="ground-truth",
+        help="'model' an OpenAI-compatible endpoint; 'hf' a local model through AgentDojo's "
+        "text convention; 'hf-native' the same model through its own tool-call format",
+    )
+    # Explicitly `agent_`-named: a driver may also load a *judge* model, and two models
+    # in one command line must not share a --model or a --dtype.
+    parser.add_argument(
+        "--agent-model", default=None, help="model id: served, or a HF repo for 'hf'"
+    )
+    parser.add_argument(
+        "--agent-base-url",
+        default="http://localhost:8000/v1",
+        help="OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama)",
+    )
+    parser.add_argument("--agent-quant", choices=["nf4"], default=None, help="'hf': 4-bit, GPU")
+    parser.add_argument("--agent-dtype", default="float16", help="'hf' only; float16 on a T4")
+    parser.add_argument("--agent-max-new-tokens", type=int, default=512, help="'hf' only")
+    parser.add_argument("--agent-max-iters", type=int, default=15, help="tool-loop turns per run")
+
+
+def agent_from_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> tuple[Agent, Any]:
+    """The agent the flags ask for, and the client behind it (None for ground truth).
+
+    The client is returned so the caller can record what it cost and how often it came
+    back empty: an empty completion parses as "no tool calls" and ends a run, which is
+    indistinguishable from an agent that finished.
+    """
+    if args.agent == "ground-truth":
+        return ground_truth_agent, None
+    if not args.agent_model:
+        parser.error(f"--agent {args.agent} needs --agent-model")
+    if args.agent == "hf-native":
+        client = HFChatClient(
+            args.agent_model, args.agent_quant, args.agent_dtype, args.agent_max_new_tokens
+        )
+        return model_agent(HFToolCallingLLM(client), args.agent_max_iters), client
+    if args.agent == "hf":
+        client: Any = HFChatClient(
+            args.agent_model, args.agent_quant, args.agent_dtype, args.agent_max_new_tokens
+        )
+    else:
+        import openai
+
+        client = openai.OpenAI(base_url=args.agent_base_url, api_key="none")
+    # Temperature 0 and a pinned model id: the run has to be repeatable, and a sampled
+    # agent would make every number a sample of one.
+    return (
+        model_agent(LocalLLM(client, args.agent_model, temperature=0.0), args.agent_max_iters),
+        client,
+    )
+
+
+def _agent_description(args: argparse.Namespace) -> str:
+    """What drove the run, in the manifest, in enough detail to read a number by."""
+    if args.agent == "ground-truth":
+        return "scripted: user ground truth, then injection ground truth"
+    where = (
+        f"local transformers, quant {args.agent_quant}, dtype {args.agent_dtype}, "
+        + (
+            "its own tool-call format"
+            if args.agent == "hf-native"
+            else "AgentDojo's text convention"
+        )
+        if args.agent.startswith("hf")
+        else f"served at {args.agent_base_url}"
+    )
+    return (
+        f"model: {args.agent_model} ({where}), greedy decoding, "
+        f"max_iters {args.agent_max_iters}, AgentDojo's default system message"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--suites", nargs="+", default=list(SUITES), choices=list(SUITES))
@@ -574,14 +944,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="vouch per field of a tool result, not per result (TaintTracker.field_labels)",
     )
+    add_agent_args(parser)
     parser.add_argument("--results", type=Path, default=RESULTS)
     args = parser.parse_args(argv)
+
+    agent, client = agent_from_args(args, parser)
 
     records = evaluate(
         args.suites,
         args.limit,
         args.endorse,
         field_labels=args.field_labels,
+        agent=agent,
         arguments=args.arguments,
         endorse_targets=args.endorse_targets,
     )
@@ -594,6 +968,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         + ["endorsed"] * args.endorse
         + ["targets"] * args.endorse_targets
         + ["fields"] * args.field_labels
+        + ["model"] * (args.agent != "ground-truth")
     )
     raw = args.results / "raw" / f"{stamp}-{tag}"
     processed = args.results / "processed" / f"{stamp}-{tag}"
@@ -614,7 +989,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "git_dirty": bool(_git("status", "--porcelain")),
                 "agentdojo_version": version("agentdojo"),
                 "benchmark_version": VERSION,
-                "agent": "scripted: user ground truth, then injection ground truth",
+                "agent": _agent_description(args),
+                "agent_empty_completions": getattr(client, "empty", None),
+                "agent_completions": getattr(client, "calls", None),
                 "attack": "direct",
                 "approver": "deny",
                 "suites": args.suites,

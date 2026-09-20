@@ -66,6 +66,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--quant", choices=["nf4"], default=None, help="4-bit, GPU only")
     parser.add_argument("--endorse", action="store_true")
     parser.add_argument("--dojo", action="store_true", help="also run AgentDojo (held out)")
+    # The same agent flags the AgentDojo driver takes, so an auditor arm can be run
+    # against a model-driven agent instead of ground truth.
+    from evaluation import dojo as _dojo
+
+    _dojo.add_agent_args(parser)
     parser.add_argument("--suites", nargs="+", default=None)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
@@ -125,12 +130,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         from evaluation import dojo
 
         before = (judge.calls, judge.seconds)
+        agent, client = dojo.agent_from_args(args, parser)
         dojo_records = dojo.evaluate(
             args.suites or list(dojo.SUITES),
             args.limit,
             args.endorse,
             build=lambda: (AllowAll(), monitor, auditor),
+            agent=agent,
         )
+        out["agentdojo_agent"] = dojo._agent_description(args)
+        out["agentdojo_agent_empty_completions"] = getattr(client, "empty", None)
         rows = dojo.score(dojo_records)
         (raw / "agentdojo.jsonl").write_text(
             "".join(json.dumps(r.as_dict(), sort_keys=True) + "\n" for r in dojo_records),

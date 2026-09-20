@@ -1812,3 +1812,67 @@ the gray zone from the cost of deciding what is in it.
 comparable with Task Shield's or AlignmentCheck's numbers. Nothing about a model-driven
 agent: the driver replays ground truth and obeys every injection, so ASR is the
 always-obeys bound and BTU is "would the policy have permitted the oracle trace".
+
+## The model-driven agent: attempted on a T4, invalid on its own terms, and too slow at any rate (2026-09-20)
+
+**Context.** Pre-registered in `research/experiments/model_agent/README.md`. Every
+AgentDojo number above was produced by `ground_truth_agent`, which replays the oracle
+trace and obeys every injection, so ASR is an always-obeys bound, BTU asks only whether
+the policy would have permitted that trace, and provenance is near-oracle. The experiment
+replaces that driver with a real model (`--agent`), which is the confound under Phase 4
+and everything after it.
+
+**What ran.** Colab T4, Qwen3-8B in NF4, `banking` only, `--limit 1` and `--limit 2`,
+five arms, at commit `a91cd1e`. Full tables are in the notebook output; the summary is
+that **every arm scored BTU 0.00, including `allow-all`.**
+
+**The run is invalid, and not because of the defense.** With `allow-all` at zero there is
+no utility ceiling, so every hypothesis in the pre-registration — all of which are ratios
+or differences against it — is undefined. A defense cannot cost utility that was never
+produced. The arms measured the harness.
+
+**The cause, from the raw completions rather than inferred.** Driven through AgentDojo's
+`LocalLLM` text convention, the model emits a well-formed
+`<function=read_file>{"file_path": "bill-december-2023.txt"}</function>` on the first
+turn, reads the bill correctly, and then writes *"I will proceed to send the payment
+using this information"* and calls nothing. `ToolsExecutionLoop` ends on a turn with no
+tool call, so the task never completes. The `[debug] broken JSON: '{}<function>'` lines
+that first suggested a formatting fault were a smaller, separate defect; the dominant
+failure is that the model stops calling tools after the first result and narrates
+instead.
+
+**What was changed in response.** `--agent hf-native` (`HFToolCallingLLM`) hands the
+tools to the chat template and parses the model's own `<tool_call>` blocks, so a result
+returns as `<tool_response>`, which is the form the model was trained to continue from.
+AgentDojo drives its own OpenAI and Anthropic models through native tool calling too, and
+`LocalLLM`'s text convention exists for servers without tool support, so this is closer
+to AgentDojo's own setup rather than a prompt tuned to its tasks. The system message is
+unchanged and still AgentDojo's.
+
+**This fix is implemented and unit-tested, and it has not been run on a GPU.** The
+session ended before it could be: the notebook's clone cell only cloned when the
+directory was absent, so the Colab checkout silently stayed at the old commit for every
+"fixed" run. Nothing below or above should be read as evidence that the native format
+resolves the problem. It is a hypothesis with a mechanism, not a measurement.
+
+**One measurement does stand, and it is the one that matters for planning.** Timed on the
+same hardware, **73.2 s per run**. A single four-defense invocation over the whole
+benchmark (97 benign and 583 attack runs) is therefore **≈ 55 h**, and the five
+pre-registered arms **≈ 277 h**. This is independent of the parsing defect: it is
+generation time. **The pre-registered run is not feasible on a T4**, and no amount of
+fixing the agent changes that by the required two orders of magnitude.
+
+**Verdict.** The experiment is recorded as **attempted and invalid**, with its cause
+identified and a fix built but unvalidated. No hypothesis is resolved. H1 through H5
+remain open.
+
+**What this changes for the pre-registration.** It asked for four suites, six arms and
+the full benchmark. That is unaffordable here. Before it is attempted again, it needs
+either a smaller reference model, a much-reduced arm set stated in advance, or hardware
+that is not a free T4 — and whichever is chosen has to be written down before the run,
+not after seeing which one made the numbers move.
+
+**Not claimed.** Nothing about what a capable agent would do, nothing about the defenses
+under a model-driven agent, and nothing about whether native tool calling fixes the
+narration failure. A quantized 8B model failing to drive a benchmark is also not evidence
+that the benchmark is hard or that the defense is sound.
