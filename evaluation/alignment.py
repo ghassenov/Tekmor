@@ -33,12 +33,12 @@ from pathlib import Path
 
 from evaluation.harness import RESULTS, SCENARIOS, digest, evaluate, load_matrix, manifest
 from evaluation.metrics import by_defense, grid, table
-from tekmor.defense import AlignmentAuditor, ReferenceMonitor
-from tekmor.defense.baselines import AllowAll
+from tekmor.defense import AlignmentAuditor, Judge, ReferenceMonitor
+from tekmor.defense.baselines import AllowAll, RefuseAll
 from tekmor.runtime.qwen import JUDGE_PROMPT, CausalJudge
 
 
-def spread(judge: CausalJudge, threshold: float) -> dict:
+def spread(judge: Judge, threshold: float) -> dict:
     """How the judge's answers are distributed: how far from the threshold it sits."""
     answers = sorted(judge._answers.values())
     if not answers:
@@ -56,7 +56,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--scenarios", type=Path, default=SCENARIOS)
     parser.add_argument("--results", type=Path, default=RESULTS)
-    parser.add_argument("--judge", default="Qwen/Qwen3-0.6B")
+    parser.add_argument(
+        "--judge",
+        default="Qwen/Qwen3-0.6B",
+        help="a model id, or 'none' for the deny-gray baseline (no model, refuses the gray zone)",
+    )
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--dtype", default="float32", help="bfloat16 for models too big for RAM")
     parser.add_argument("--quant", choices=["nf4"], default=None, help="4-bit, GPU only")
@@ -66,9 +70,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
 
-    judge = CausalJudge(
-        model_id=args.judge, name=args.judge.rsplit("/", 1)[-1], dtype=args.dtype, quant=args.quant
+    model_judge = (
+        None
+        if args.judge == "none"
+        else CausalJudge(
+            model_id=args.judge,
+            name=args.judge.rsplit("/", 1)[-1],
+            dtype=args.dtype,
+            quant=args.quant,
+        )
     )
+    judge: Judge = RefuseAll() if model_judge is None else model_judge
     monitor = ReferenceMonitor()
     auditor = AlignmentAuditor(monitor, judge, args.threshold)
 
@@ -141,9 +153,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 **manifest(scenarios, list(metrics), args.scenarios),
                 "inputs": digest(args.scenarios),
                 "judge": args.judge,
-                "judge_prompt": JUDGE_PROMPT,
-                "judge_dtype": args.dtype,
-                "judge_quant": args.quant,
+                # The deny-gray baseline runs no model, so the prompt, dtype and
+                # quantization that describe one would be noise in its manifest.
+                "judge_prompt": None if model_judge is None else JUDGE_PROMPT,
+                "judge_dtype": None if model_judge is None else args.dtype,
+                "judge_quant": None if model_judge is None else args.quant,
                 "device": device,
                 "threshold": args.threshold,
                 "endorse_named": args.endorse,
