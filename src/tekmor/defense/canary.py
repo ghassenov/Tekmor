@@ -1,44 +1,29 @@
-"""CANARY-FLOW: the argument-level residual, checked against the secret registry.
+"""CANARY-FLOW: an encoding-aware scan of outbound arguments, layered over any defense.
 
-`docs/technical-doc.md` mechanism 8. `ReferenceMonitor` decides from *provenance*: a
-confidential value is one the run read through a labelled source, which is why every
-encoding of it is refused for the same reason and why no encoding list ever has to be
-complete. The residual, recorded in `docs/decisions.md`, is the other direction — a
-secret that reaches an argument without passing through a labelled observation is
-invisible to that rule, because nothing in the run ever said it was confidential. A
-mislabelled wiki page with a token pasted into it is the ordinary way that happens, and
-it needs no attacker sophistication at all.
+See `docs/architecture.md` for where this sits and `docs/limitations.md` for what it does
+not cover. What is recorded here is the reasoning a reader of *this file* needs.
 
-This wraps a defense and closes that residual by scanning the outbound call's arguments
-for known secrets in any encoding `tekmor.provenance.canary` recognises. It is
-deliberately *layered* rather than folded into the monitor:
+**Why a layer and not part of the monitor.** The monitor never reads argument text, and
+that is exactly what makes its verdicts encoding-independent. Folding a text matcher into
+it would retire that claim for every decision, including the ones that never needed the
+matcher. Keeping it separate also lets the ablations run the core with and without it,
+and keeps a text matcher from being mistaken for the defense -- the literature this
+project is built on is about text matchers being bypassed.
 
-- the monitor's claim is that it never reads argument text, and that claim is what makes
-  its verdicts encoding-independent. Mixing a text matcher into it would retire the
-  claim for every decision, including the ones that never needed the matcher;
-- Phase 4 ablations need to run the core with and without this, which a wrapper gives
-  for free and an inlined check does not;
-- it is a text matcher, and the literature this project is built on is about text
-  matchers being bypassed. Keeping it visibly separate keeps it from being mistaken for
-  the defense.
+**Monotone-safe fusion** (`defense/CLAUDE.md` invariant 4). This only ever *raises*
+suspicion: a BLOCK from the wrapped defense is returned untouched, ALLOW or REWRITE can
+become BLOCK but never the reverse, and the reported risk is raised to this layer's
+severity and never lowered below what the wrapped defense scored.
 
-**Monotone-safe fusion** (`defense/CLAUDE.md` invariant 4): this only ever *raises*
-suspicion. A BLOCK from the wrapped defense is returned untouched, and the scanner's own
-answer can turn ALLOW or REWRITE into BLOCK but never the reverse. The same holds for
-the reported risk score, which is raised to this layer's own severity and never lowered
-below what the wrapped defense scored.
+**It scans arguments, so it sees only what the call carries.** In the financial domain
+the thing that leaves is a *prepared payment* staged by an earlier call, and
+`execute_payment` takes only an id -- so a canary routed through payment state is a leak
+this layer cannot see, while `World.canaries_in` can. Scanning state rather than
+arguments is a different mechanism; the rule that does cover it is the provenance one.
+Pinned in `tests/security/test_canary_scanner.py`.
 
-**It scans arguments, so it sees only what the call itself carries.** In the financial
-domain what leaves is the *prepared payment*, staged by an earlier non-outbound call, and
-`execute_payment` takes only an id — so a canary routed through payment state is a leak
-this layer does not see and `World.canaries_in` does (it reads the payment). That is not
-an oversight to fix here: scanning state rather than arguments is a different mechanism,
-and the rule that does cover it is the provenance one, which labels the action from the
-read that produced the value. Recorded in `tests/security/test_canary_scanner.py`.
-
-**The secret registry is a deployment input, not scenario metadata.** It is the
-organization's own list of what must not leave — the DLP analogue — and it carries no
-scenario id, no `benign` flag and nothing else a defense could recognise a test case by
+**The secret registry is deployment input, not scenario metadata.** It carries no
+scenario id and no `benign` flag -- nothing a defense could recognise a test case by
 (`src/CLAUDE.md`). Deriving it from anything that does would void every number measured
 with it.
 """

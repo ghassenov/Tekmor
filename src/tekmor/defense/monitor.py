@@ -1,34 +1,28 @@
-"""The reference monitor: the policy rules turned into a verdict.
+"""The reference monitor: the policy predicates turned into a verdict.
 
-`docs/technical-doc.md` Part VII, Proposal A. The policy engine
-(`tekmor.policy.core`) answers two yes/no questions about a candidate action; this
-module decides what to *do* about a no, which is where ALLOW / REWRITE / ESCALATE /
-BLOCK are chosen.
+`docs/architecture.md` explains the design; this note records what matters when editing
+the file. The policy engine (`tekmor.policy.core`) answers yes/no about a candidate
+action, and this module decides what to *do* about a no.
 
-The ordering of the checks is the design, and it is fixed:
+**The ordering is the design, and it is fixed.**
 
-1. **Least privilege.** A tool the policy does not permit is blocked before anything
+1. **Least privilege** -- a tool the policy does not permit is blocked before anything
    else is considered.
-2. **Permitted-Flow.** A confidential value heading out to an unauthorized recipient is
-   blocked. There is no safe downgrade of an exfiltration: a lower-capability variant
-   that still carries the value has only moved it, and escalating hands a human a
-   decision they cannot check, because the value is not in the argument in a form they
-   would recognise.
-3. **Trusted-Action.** A sensitive tool driven by inputs below the integrity threshold
-   is downgraded to its lower-capability variant when the policy declares one, and
-   escalated to a human when it does not. This is the branch that exists so the answer
-   to an injection is not always "stop working": the SOC analyst still gets a ticket,
-   and the drafted mail is still there for a human to send.
+2. **Permitted-Flow** -- there is no safe downgrade of an exfiltration. A
+   lower-capability variant still carrying the value has only moved it, and escalating
+   hands a human a decision they cannot check, because the value is not in the argument
+   in a form they would recognise. So this blocks rather than rewrites.
+3. **Trusted-Action** -- downgraded where the policy declares a variant, escalated where
+   it does not. This is the branch that exists so the answer to an injection is not
+   always "stop working": the analyst still gets a ticket, the drafted mail is still
+   there for a human to send.
 
-The policy predicates are evaluated once, into `signals.Signals`, and both the verdict
-and the reported risk score are read off that one object. That is deliberate: a score
-derived from a second evaluation of the same predicates could drift from the decision it
-is printed next to. The score never changes the verdict — the rules below do, in the
-order below — and `risk.band()` is the claim that the two agree, asserted by test.
+The predicates are evaluated once into `signals.Signals`, and both the verdict and the
+reported risk are read off that one object -- a score derived from a second evaluation
+could drift from the decision it is printed beside.
 
-Everything this decides is computed from the four inputs it is handed. It never sees the
-scenario, the world, the file it came from, or whether the run is supposed to be an
-attack.
+Everything here is computed from the four inputs it is handed. It never sees the
+scenario, the world, the file it came from, or whether the run is meant to be an attack.
 """
 
 from __future__ import annotations
