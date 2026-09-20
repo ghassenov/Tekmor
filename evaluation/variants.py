@@ -2,7 +2,7 @@
 
     uv run python -m evaluation.variants
 
-`docs/technical-doc.md` Part VI, *Robustness variants*: if ASR stays flat when only the
+`docs/10-research-report.md` Part VI, *Robustness variants*: if ASR stays flat when only the
 content an attacker controls changes, the defense is not overfit to one wording. Each
 transform below rewrites a scenario's untrusted content and the scripted agent's output
 the same way, runs the result through the ordinary harness, and reports it *paired* with
@@ -15,7 +15,7 @@ consecutive reads, and the outcome conditions — rewritten the same way as the 
 because a condition that names the old wording would score a changed attack as a failed
 one. Never the policy, the trust labels, the canary registry, the tools, or anything a
 scorer reads (`family`, `level`, `benign`). A variant's `id` is the original's plus
-`~transform`, and like every id it never reaches a defense (`evaluation/CLAUDE.md`).
+`~transform`, and like every id it never reaches a defense (`docs/06-evaluation-methodology.md`).
 
 **A variant is only scored if its ground truth survived.** Every variant is replayed under
 `AllowAll` first: an attack must still reach its goal undefended and benign work must

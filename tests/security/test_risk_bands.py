@@ -43,7 +43,7 @@ def test_the_canary_layer_raises_the_score_with_the_verdict():
     assert core.keys() == layered.keys()
     for key, decision in layered.items():
         # Monotone-safe fusion on the score as well as on the verdict: the layer may
-        # only raise suspicion (`defense/CLAUDE.md` invariant 4).
+        # only raise suspicion (monotone-safe fusion (`docs/03-architecture.md` §3.7)).
         assert decision.risk >= core[key].risk
         assert band(decision.risk) is decision.verdict
 

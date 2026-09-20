@@ -1,6 +1,6 @@
 """Tool sets per domain.
 
-`docs/technical-doc.md` Part I names three domains: enterprise productivity, a financial
+`docs/10-research-report.md` Part I names three domains: enterprise productivity, a financial
 sandbox with a prepare → confirm → execute payment lifecycle, and a security operations
 centre. All three exist here, each with a scenario in `evaluation/scenarios/`.
 
@@ -49,7 +49,7 @@ def _read_secret(world: World, args: Mapping[str, Any]) -> Observation:
 def _remember(world: World, args: Mapping[str, Any]) -> str:
     """Write a note the agent can recall later — and label it the way a naive store does.
 
-    The memory poisoning family (`docs/technical-doc.md` Part I) turns on whether a round
+    The memory poisoning family (`docs/10-research-report.md` Part I) turns on whether a round
     trip through memory launders trust. This store is written to launder it: whatever the
     agent hands it is stored as ordinary internal content, because that is what a memory
     implementation nobody thought about does. The label that survives is the run's taint

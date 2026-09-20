@@ -2,7 +2,7 @@
 
     uv run python -m tekmor.observability.viewer evaluation/results/raw/<stamp>/decisions.jsonl
 
-`docs/technical-doc.md` Part V: a reader should be able to watch attacker-controlled data
+`docs/10-research-report.md` Part V: a reader should be able to watch attacker-controlled data
 flow toward a sensitive action and see the edge get cut, without reading code. That is
 what this renders — per run, the chain
 
@@ -12,9 +12,9 @@ as a table, and the influence set as a graph whose edges are labelled with the t
 the source they come from and drawn cut where the action they fed was not executed.
 
 **It reads the JSONL and nothing else.** Not the scenario, not `benign`, not the world:
-if the viewer can show it, the trace carries it, which is the property `observability/
-CLAUDE.md` asks for and the reason this is the honest way to find a field the schema is
-missing. It also means the viewer never knows whether a decision was *correct* — that
+if the viewer can show it, the trace carries it, which is the property the
+observability design asks for and the reason this is the honest way to find a field the
+schema is missing. It also means the viewer never knows whether a decision was *correct* — that
 question is the evaluation harness's, and keeping it out of the trace renderer is what
 stops a debugging tool from quietly becoming a scorer.
 

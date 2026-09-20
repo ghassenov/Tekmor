@@ -1,6 +1,6 @@
 """The encoding-aware scanner: what it recognises, and what it is documented to miss.
 
-`tests/CLAUDE.md`: test the mechanism, not the wording. The negative half matters as much
+Test the mechanism, not the wording. The negative half matters as much
 as the positive one — a scanner that matches too much turns every benign mail into a leak
 and inflates the false-block rate this project reports as a headline metric.
 """

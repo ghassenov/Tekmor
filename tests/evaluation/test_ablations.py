@@ -2,7 +2,7 @@
 
 The first test checks the mechanism — an ablation that changed the rules rather than the
 input would be measuring a second implementation. The rest pin the measured findings
-recorded in `docs/decisions.md`, so a change to the monitor that moves them is a test
+recorded in `docs/07-results.md`, so a change to the monitor that moves them is a test
 failure rather than a table nobody reran.
 """
 

@@ -25,7 +25,7 @@ that name.
 So the label was not wrong about what `get_channels` guarantees. The institution
 guarantees the *list*: that these channels exist, and that these are their names. It
 guarantees nothing about the text somebody chose to call a channel. Collapsing a result
-to one label is the gap `src/tekmor/provenance/CLAUDE.md` already names as a rule
+to one label is the gap `docs/04-provenance-and-trust.md` already names as a rule
 ("Provenance is field-level, not call-level. A single tool result can mix trust levels
 across fields; preserve that granularity"), so this is the documented direction, not a
 new idea.

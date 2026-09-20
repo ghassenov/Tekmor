@@ -13,7 +13,7 @@ labels: research
 
 ## Motivation
 
-<!-- Why this matters for Tekmor, and which gap in docs/technical-doc.md Part X it
+<!-- Why this matters for Tekmor, and which gap in docs/10-research-report.md Part X it
      addresses. -->
 
 ## Related work

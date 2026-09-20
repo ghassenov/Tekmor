@@ -1,9 +1,9 @@
 """Baseline defenses: the reference points every later number is read against.
 
-`evaluation/CLAUDE.md`: a number without a baseline says nothing. These bracket the
+`docs/06-evaluation-methodology.md`: a number without a baseline says nothing. These bracket the
 space — allow-all gives the utility ceiling and the security floor, deny-sensitive the
 reverse, and the keyword filter stands in for the text-matching defenses that the
-literature reports adaptive attackers bypassing (`docs/technical-doc.md` Part II).
+literature reports adaptive attackers bypassing (`docs/10-research-report.md` Part II).
 `RefuseAll` brackets Proposal B the same way: it is the judge a judge has to beat.
 
 None of them is a defense. They exist to be beaten.
@@ -112,7 +112,7 @@ class RefuseAll:
 
     Wrapped in an `AlignmentAuditor` this is the gray-zone refusal switch — every action
     the rules allowed under sub-threshold influence is sent to a human, and nothing else
-    moves. It is the control `docs/decisions.md` left open: both GPU judges refused ~99%
+    moves. It is the control `docs/07-results.md` left open: both GPU judges refused ~99%
     of the gray zone, so their rows cannot be read as alignment checking until this row
     exists beside them. Whatever a judge buys over *this* is what the judge contributes;
     the rest is the refusal.

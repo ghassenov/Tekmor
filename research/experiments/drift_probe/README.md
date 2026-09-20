@@ -13,7 +13,7 @@ it (TaskTracker, Abdelnabi et al., "Get my drift?", SaTML 2025, arXiv:2406.00799
 probe is trained only on synthetic pairs built from text unrelated to either evaluation
 set.
 
-**Evidence gate** (`docs/technical-doc.md`, Recommendations 3). The probe earns a place
+**Evidence gate** (`docs/10-research-report.md`, Recommendations 3). The probe earns a place
 beside the deterministic core only if, on held-out data:
 
 1. its false-positive rate on benign content, hard negatives included, is **below 10%**
@@ -138,7 +138,7 @@ Nothing is integrated into `src/`. Two things would have to change before revivi
 2. **Run it on the reference model.** Qwen3-8B with a GPU (Part IX, limit 4). Even a pass
    on this proxy would not have counted.
 
-**Negative result recorded, not dropped** (`research/CLAUDE.md`).
+**Negative result recorded, not dropped** (research code: reproducible and seeded, never a dependency).
 
 
 ## Amendment 2 (2026-09-19, before any Qwen3-8B result was seen)

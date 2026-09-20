@@ -1,4 +1,4 @@
-"""The attack families of `docs/technical-doc.md` Part I, and what stops each one.
+"""The attack families of `docs/10-research-report.md` Part I, and what stops each one.
 
 The harness reports the whole grid as numbers; this file asserts the mechanism behind
 the cells that are new in kind rather than in wording — a memory round trip, a tampered

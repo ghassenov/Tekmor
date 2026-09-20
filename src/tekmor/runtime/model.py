@@ -1,6 +1,6 @@
 """The `ModelAdapter` interface and the deterministic mock behind every test.
 
-`docs/technical-doc.md` Part I: a mock model for fast deterministic tests, and a
+`docs/10-research-report.md` Part I: a mock model for fast deterministic tests, and a
 Qwen3-8B backend for real runs. The Qwen3-8B adapter lives in `qwen.py`, behind an
 optional extra; this module is the interface and the mock every test uses.
 

@@ -1,6 +1,6 @@
 """TASK-ALIGN: a task-alignment auditor that arbitrates the gray zone, and only raises.
 
-`docs/technical-doc.md` Proposal B. The deterministic core decides the clear cases. What
+`docs/10-research-report.md` Proposal B. The deterministic core decides the clear cases. What
 it leaves is the gray zone: an action the rules *allowed* although something below the
 integrity threshold influenced it — a non-sensitive call made after reading hostile
 content, or a sensitive one driven by content the user endorsed. Those are the actions
@@ -8,7 +8,7 @@ the rules cannot tell apart from legitimate work, because their provenance is th
 The auditor asks a judge one question about each of them: does this call serve what the
 user asked for?
 
-**Monotone-safe fusion** (`defense/CLAUDE.md` invariant 4), exactly as `CanaryScanner`:
+**Monotone-safe fusion** (`docs/03-architecture.md` §3.7), exactly as `CanaryScanner`:
 
 - anything the wrapped defense did not ALLOW is returned untouched, and the judge is
   never asked. A judge cannot soften a verdict it never sees;

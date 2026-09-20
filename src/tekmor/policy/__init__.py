@@ -1,6 +1,6 @@
 """Tekmor policy component: per-domain policy data and its deterministic evaluation.
 
-The two rules of `docs/technical-doc.md` Part IV — Trusted-Action and Permitted-Flow —
+The two rules of `docs/10-research-report.md` Part IV — Trusted-Action and Permitted-Flow —
 are `trusted_action` and `permitted_flow`. They are predicates; the verdict they lead to
 is `tekmor.defense.monitor`'s.
 """

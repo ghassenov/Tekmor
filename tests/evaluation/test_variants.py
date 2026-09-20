@@ -161,7 +161,7 @@ def test_every_accepted_variant_keeps_its_ground_truth_undefended(variants):
 
 
 def test_no_scenario_metadata_reaches_a_defense(variants):
-    """`evaluation/CLAUDE.md`: the variant generator must never pass metadata to a defense."""
+    """The variant generator must never pass scenario metadata to a defense."""
     seen = []
 
     class Spy:

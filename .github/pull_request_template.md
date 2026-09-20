@@ -9,7 +9,7 @@
 ## How it was implemented
 
 <!-- Approach and any notable design decisions. If this deviates from
-     docs/technical-doc.md, say so and why. -->
+     docs/10-research-report.md, say so and why. -->
 
 ## Tests performed
 

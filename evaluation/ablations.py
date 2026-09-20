@@ -2,7 +2,7 @@
 
     uv run python -m evaluation.ablations
 
-`docs/technical-doc.md` Part VI and Part XIII, Phase 4: no provenance, no trust
+`docs/10-research-report.md` Part VI and Part XIII, Phase 4: no provenance, no trust
 propagation, no rewrite, rules only, full system. An ablation is the only honest way to
 claim a mechanism contributes anything: the difference between two rows of the same
 matrix is what that mechanism bought, and a mechanism whose row does not move bought

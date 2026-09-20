@@ -103,7 +103,7 @@ def test_an_unpermitted_tool_tops_the_scale():
     "sources", [(USER,), (HOSTILE,), (SECRET,), (USER, SECRET), (HOSTILE, SECRET)]
 )
 def test_the_band_of_the_score_is_the_verdict_the_rules_reached(action, sources):
-    # The threshold table of docs/technical-doc.md Part XIII, stated as a claim about the
+    # The threshold table of docs/10-research-report.md Part XIII, stated as a claim about the
     # rules rather than as a second decision procedure. If a severity and a rule ever
     # disagree, this is where it surfaces instead of in a dashboard.
     monitor = ReferenceMonitor()

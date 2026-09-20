@@ -1,13 +1,13 @@
 """Signal extraction: the named predicates a decision is computed from.
 
-`docs/technical-doc.md` Part IV stage 2. The monitor used to call the policy predicates
+`docs/10-research-report.md` Part IV stage 2. The monitor used to call the policy predicates
 inline, which was correct but left the signals implicit: there was nothing a risk score,
 a trace line or a viewer could read without re-deriving them, and a second reader of the
 same facts is a second chance to disagree with the decision.
 
 So the predicates are evaluated **once**, here, into a value the decision and the risk
 score both read. That is what makes the reason codes and the score faithful in the sense
-`defense/CLAUDE.md` means: not "consistent with" the decision but computed from the same
+`docs/03-architecture.md` means: not "consistent with" the decision but computed from the same
 object it was.
 
 Nothing here decides. Nothing here reads a clock, a model or the world — the signals are

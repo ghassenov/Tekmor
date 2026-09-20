@@ -10,7 +10,7 @@ matcher. Keeping it separate also lets the ablations run the core with and witho
 and keeps a text matcher from being mistaken for the defense -- the literature this
 project is built on is about text matchers being bypassed.
 
-**Monotone-safe fusion** (`defense/CLAUDE.md` invariant 4). This only ever *raises*
+**Monotone-safe fusion** (`docs/03-architecture.md` §3.7). This only ever *raises*
 suspicion: a BLOCK from the wrapped defense is returned untouched, ALLOW or REWRITE can
 become BLOCK but never the reverse, and the reported risk is raised to this layer's
 severity and never lowered below what the wrapped defense scored.
@@ -24,8 +24,8 @@ Pinned in `tests/security/test_canary_scanner.py`.
 
 **The secret registry is deployment input, not scenario metadata.** It carries no
 scenario id and no `benign` flag -- nothing a defense could recognise a test case by
-(`src/CLAUDE.md`). Deriving it from anything that does would void every number measured
-with it.
+(`docs/06-evaluation-methodology.md` §6.3). Deriving it from anything that does
+would void every number measured with it.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ class CanaryScanner:
 
         # Which secret, and which argument, stay out of the public reason codes: the
         # first is close to the value and the second is a hill-climbing channel that
-        # tells an attacker exactly which field was read (`defense/CLAUDE.md`).
+        # tells an attacker exactly which field was read (`docs/03-architecture.md` §3.7).
         return Decision(
             Verdict.BLOCK,
             ("CANARY_IN_OUTBOUND_ARGUMENT", "RECIPIENT_NOT_AUTHORIZED"),

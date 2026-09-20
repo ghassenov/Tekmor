@@ -1,6 +1,6 @@
 """Encoding-aware detection of a tagged secret in text.
 
-`docs/technical-doc.md` Part I and mechanism 8 (CANARY-FLOW): exfiltration is checked
+`docs/10-research-report.md` Part I and mechanism 8 (CANARY-FLOW): exfiltration is checked
 against *arguments to outbound tools*, and "encoding defeats naive regex" — a base64,
 hex, spaced or reversed copy of a token is the same token. CVR is defined as a secret
 reaching an outbound argument **in any encoding**, so this module is what makes that
@@ -14,7 +14,7 @@ Nothing here is provenance-aware: it reads text and says whether a value is in i
 is deliberate — it is the residual check for a value that reached an argument *without*
 passing through a labelled source, and it is not a replacement for the label
 (`tekmor.provenance.trust`). A defense built on this alone is a text matcher, which
-`docs/technical-doc.md` Part II is about the failure of.
+`docs/10-research-report.md` Part II is about the failure of.
 
 ponytail: the recognised forms are plain / separator-broken / case-shifted, reversed,
 hex, and base64 at each of the three byte alignments. Compositions of two (base64 of the

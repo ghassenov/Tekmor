@@ -1,6 +1,6 @@
 """CALIB-RISK: Platt-scale the risk score, and measure whether that made it a probability.
 
-`docs/technical-doc.md` Part IX, proposal 7. The severities in `src/tekmor/defense/risk.py`
+`docs/10-research-report.md` Part IX, proposal 7. The severities in `src/tekmor/defense/risk.py`
 are *ordinal* — hand-ordered by how much blast radius each violation covers — so the score
 orders actions well (AUROC) and its magnitudes mean nothing (ECE). Platt scaling is the
 standard one-dimensional fix: fit a logistic `P(unsafe | score) = 1 / (1 + exp(a·s + b))`
@@ -16,7 +16,7 @@ one, repeat — and the raw-versus-calibrated comparison below is between two nu
 computed over the same held-out actions.
 
 **Calibrating does not change what the defense does.** The decision is the rules', in
-their fixed order (`docs/decisions.md`); the score describes it and now describes it on a
+their fixed order (`docs/07-results.md`); the score describes it and now describes it on a
 probability scale. The other half of proposal 7 — learning-to-defer thresholds that
 *escalate* on calibrated uncertainty — would give the score authority over a verdict, which
 is the trade this project has already declined once, and it is not implemented here.

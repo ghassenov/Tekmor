@@ -4,7 +4,7 @@
 
 ## Why this exists
 
-`docs/decisions.md` — *"Proposal B on a GPU"* — measured Qwen3-8B (NF4) and Phi-3-mini
+`docs/07-results.md` — *"Proposal B on a GPU"* — measured Qwen3-8B (NF4) and Phi-3-mini
 (fp16) as gray-zone judges on AgentDojo v1.2.2. Both drove pooled ASR to 0.00 and cost
 about a fifth of benign utility (BTU 0.69 → 0.49 and 0.47). Both also refused almost
 everything they were asked: Qwen3-8B answered below the threshold on 852 of 858 calls,
@@ -92,7 +92,7 @@ record, and the only thing that can tie this run to them is a matching unaudited
 # Results
 
 Run at commit `7b88710` (this file's pre-registration commit), clean tree, CPU, no model
-loaded. Full tables in `docs/decisions.md`; this section records the gates only.
+loaded. Full tables in `docs/07-results.md`; this section records the gates only.
 
 ## Against the pre-registered gates
 

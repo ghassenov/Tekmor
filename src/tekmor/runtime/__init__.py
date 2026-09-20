@@ -1,6 +1,6 @@
 """Tekmor runtime component: the model adapters, the run loop, and the tool gateway.
 
-The Qwen3-8B adapter needs the `qwen` extra; see src/CLAUDE.md.
+The Qwen3-8B adapter needs the `qwen` extra; see docs/03-architecture.md.
 """
 
 from tekmor.runtime.gateway import Execution, ToolGateway, deny

@@ -1,6 +1,6 @@
 """The decision contract every defense implements, and the mediation entry point.
 
-`docs/technical-doc.md` Part IV: every candidate action passes through
+`docs/10-research-report.md` Part IV: every candidate action passes through
 `Defense.decide(state, action, provenance, policy) -> Decision`. Routing all actions
 through `mediate()` is what makes the defense a reference monitor with complete
 mediation; failing closed there is what keeps an internal error from becoming an ALLOW.
@@ -44,7 +44,8 @@ class ActionProvenance:
 
     How the set is computed is `tekmor.provenance.taint`'s business, not the decision
     core's: what the decision needs is the set and its meet. Field-level provenance
-    within one observation is the remaining granularity gap, recorded in `src/CLAUDE.md`.
+    within one observation is the remaining granularity gap; see
+    `docs/04-provenance-and-trust.md`.
     """
 
     sources: tuple[Source, ...] = ()

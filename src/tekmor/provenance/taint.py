@@ -1,6 +1,6 @@
 """Taint propagation: what the agent has read, and therefore what drove its next action.
 
-`docs/technical-doc.md` Part I and `provenance/CLAUDE.md`: an action's integrity is the
+`docs/04-provenance-and-trust.md`: an action's integrity is the
 minimum integrity of everything that influenced it. This module computes that set
 instead of taking the scenario author's word for it, which is what turns the monitor's
 verdicts into evidence about a *system* rather than about hand-declared labels.
@@ -14,8 +14,8 @@ of the read that produced it.
 ponytail: influence is call-level and prefix-monotone, not field-level. Every observation
 the agent has seen taints every later action, so a benign action taken after reading one
 hostile document is labelled by that document. That is the conservative direction, and
-over-tainting is a real cost (`provenance/CLAUDE.md`): the benign halves of the scenario
-pairs are the check on it.
+over-tainting is a real cost (`docs/04-provenance-and-trust.md` §4.4): the benign
+halves of the scenario pairs are the check on it.
 
 **Argument-level origins** are the experimental upgrade
 (`research/experiments/argument_provenance/`). `TaintTracker.origins` traces each
@@ -168,7 +168,7 @@ def leaves(value: Any) -> tuple[str | None, ...]:
 def endorse(source: Source, args: Mapping[str, Any], request: str) -> Source:
     """`source`, endorsed by the user if the call that produced it named what they named.
 
-    The endorsement primitive `docs/technical-doc.md` Recommendation 1 asks for once
+    The endorsement primitive `docs/10-research-report.md` Recommendation 1 asks for once
     utility falls: when the user's authenticated request names a resource verbatim ("pay
     the bill in `bill-december-2023.txt`") and the agent reads exactly that resource, the
     user has vouched for acting on it, and content that was merely *unvouched for* may

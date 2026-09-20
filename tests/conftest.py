@@ -2,7 +2,7 @@
 
 The scenarios are the evaluated matrix in `evaluation/scenarios/`, not a private copy:
 the tests that assert a verdict and the harness that scores it must be looking at the
-same files, or a scenario can drift out from under one of them (`docs/decisions.md`).
+same files, or a scenario can drift out from under one of them (`docs/07-results.md`).
 """
 
 from pathlib import Path

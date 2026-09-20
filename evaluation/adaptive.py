@@ -2,7 +2,7 @@
 
     uv run python -m evaluation.adaptive [--rounds 50] [--seed 0]
 
-`docs/technical-doc.md` Part VI, *Adaptive attacker*: a mutation attacker that sees only
+`docs/10-research-report.md` Part VI, *Adaptive attacker*: a mutation attacker that sees only
 public decisions and coarse reason codes, mutates wording, placement and fragmentation
 over N rounds to maximise ASR, and is reported as ASR per round. The literature this
 project rests on (Zhan et al.; Nasr, Carlini et al.) is that static ASR flatters every
@@ -30,7 +30,7 @@ the first mutation that changed nothing it could see.
 counted but never kept. Without that check the climb would "win" by mutating the attack
 into something the scorer cannot count. The check also bounds the attacker: a leak the
 ground truth cannot see — `base64-reversed`, a secret split across arguments — is one it
-cannot be credited with either. That blind spot is `docs/decisions.md`'s, and it is
+cannot be credited with either. That blind spot is `docs/07-results.md`'s, and it is
 reported (`rejected`), not hidden.
 
 ponytail: the genome is three genes over the variant transforms, 24 candidates in all, so
